@@ -535,7 +535,11 @@ def _load_supervision_sheet(connection, sheet: str, frame: pd.DataFrame, carga_i
     if frame.empty:
         return 0, duplicates
 
-    start = _next_origin(connection, "fact_supervision", sheet)
+    start = _next_origin(
+    connection,
+    "fact_supervision",
+    record_type,
+)
     frame["_fila_origen"] = range(start, start + len(frame))
 
     staging_frame = frame.drop(columns=list(private_columns & set(frame.columns)))
@@ -584,7 +588,7 @@ def _load_supervision_sheet(connection, sheet: str, frame: pd.DataFrame, carga_i
             registration = _clean_text(row.get("matricula"))
             fault_count = 0
         facts.append({
-            "fuente": sheet,
+            "fuente": record_type,
             "fila_origen": int(row["_fila_origen"]),
             "fecha_id": date_map[pd.Timestamp(row["fecha_supervision"]).date()],
             "ubicacion_id": location_map[location],
@@ -622,7 +626,11 @@ def _load_supervision_sheet(connection, sheet: str, frame: pd.DataFrame, carga_i
         fact_rows = connection.execute(text("""
             SELECT supervision_id, fila_origen FROM dw.fact_supervision
             WHERE fuente = :fuente AND fila_origen BETWEEN :start AND :finish
-        """), {"fuente": sheet, "start": start, "finish": start + len(frame) - 1})
+        """), {{
+    "fuente": record_type,
+    "start": start,
+    "finish": start + len(frame) - 1,
+}})
         fact_map = {row.fila_origen: row.supervision_id for row in fact_rows}
         fault_names = sorted({name for names in frame["_fault_names"] for name in names})
         if fault_names:
