@@ -465,15 +465,21 @@ def _insert_dates(connection, values: pd.Series) -> dict[date, int]:
 
 
 def _insert_locations(connection, frame: pd.DataFrame) -> dict[tuple[str, str, str], int]:
-    triples = {
-        (
-            _clean_text(row.poligono, UNKNOWN),
-            _clean_text(row.subzona, UNKNOWN),
-            _clean_text(row.subpoligono, UNKNOWN),
+    # Evita conjuntos directos: si un controlador devuelve un valor complejo,
+    # no se intentará insertar un dict no hashable dentro de un set.
+    triples_by_key: dict[str, tuple[str, str, str]] = {}
+    for row in frame[["poligono", "subzona", "subpoligono"]].itertuples(index=False):
+        triple = (
+            _clean_text(row.poligono, UNKNOWN) or UNKNOWN,
+            _clean_text(row.subzona, UNKNOWN) or UNKNOWN,
+            _clean_text(row.subpoligono, UNKNOWN) or UNKNOWN,
         )
-        for row in frame[["poligono", "subzona", "subpoligono"]].itertuples(index=False)
-    }
-    parameters = [dict(poligono=a, subzona=b, subpoligono=c) for a, b, c in sorted(triples)]
+        triples_by_key.setdefault(json.dumps(triple, ensure_ascii=False), triple)
+
+    parameters = [
+        {"poligono": a, "subzona": b, "subpoligono": c}
+        for a, b, c in sorted(triples_by_key.values())
+    ]
     if parameters:
         connection.execute(text("""
             INSERT INTO dw.dim_ubicacion (poligono, subzona, subpoligono)
@@ -485,8 +491,21 @@ def _insert_locations(connection, frame: pd.DataFrame) -> dict[tuple[str, str, s
 
 
 def _insert_activities(connection, rows: list[dict[str, str]]) -> dict[tuple[str, str, str, str], int]:
-    unique = {tuple(row[key] for key in ("actividad_terrestre", "actividad_realizada", "tipo_actividad", "es_terrestre")) for row in rows}
-    parameters = [dict(zip(("actividad_terrestre", "actividad_realizada", "tipo_actividad", "es_terrestre"), values)) for values in sorted(unique)]
+    columns = (
+        "actividad_terrestre",
+        "actividad_realizada",
+        "tipo_actividad",
+        "es_terrestre",
+    )
+    unique_by_key: dict[str, tuple[str, str, str, str]] = {}
+    for row in rows:
+        values = tuple(
+            _clean_text(row.get(column), UNKNOWN) or UNKNOWN
+            for column in columns
+        )
+        unique_by_key.setdefault(json.dumps(values, ensure_ascii=False), values)
+
+    parameters = [dict(zip(columns, values)) for values in sorted(unique_by_key.values())]
     if parameters:
         connection.execute(text("""
             INSERT INTO dw.dim_actividad
@@ -535,14 +554,14 @@ def _load_supervision_sheet(connection, sheet: str, frame: pd.DataFrame, carga_i
     if frame.empty:
         return 0, duplicates
 
-    start = _next_origin(
-    connection,
-    "fact_supervision",
-    record_type,
-)
+    # La base de datos utiliza valores canónicos sin espacios en `fuente`
+    # (FALTAS y SIN_FALTAS), aunque el nombre de la hoja sea "SIN FALTAS".
+    start = _next_origin(connection, "fact_supervision", record_type)
     frame["_fila_origen"] = range(start, start + len(frame))
 
-    staging_frame = frame.drop(columns=list(private_columns & set(frame.columns)))
+    staging_frame = frame.drop(
+        columns=[column for column in private_columns if column in frame.columns]
+    )
     staging_frame.to_sql(
         staging_table,
         connection,
@@ -626,13 +645,13 @@ def _load_supervision_sheet(connection, sheet: str, frame: pd.DataFrame, carga_i
         fact_rows = connection.execute(text("""
             SELECT supervision_id, fila_origen FROM dw.fact_supervision
             WHERE fuente = :fuente AND fila_origen BETWEEN :start AND :finish
-        """), {{
-    "fuente": record_type,
-    "start": start,
-    "finish": start + len(frame) - 1,
-}})
+        """), {"fuente": record_type, "start": start, "finish": start + len(frame) - 1})
         fact_map = {row.fila_origen: row.supervision_id for row in fact_rows}
-        fault_names = sorted({name for names in frame["_fault_names"] for name in names})
+        fault_names = sorted(dict.fromkeys(
+            _clean_text(name, UNKNOWN) or UNKNOWN
+            for names in frame["_fault_names"]
+            for name in names
+        ))
         if fault_names:
             catalog_rows = list(connection.execute(text(
                 "SELECT tipo_falta_id, codigo, nombre FROM dw.dim_tipo_falta"
@@ -797,10 +816,19 @@ def load_preview(engine, preview: ETLPreview) -> ETLResult:
         duplicates = 0
         details: dict[str, int] = {}
         for sheet, frame in preview.frames.items():
-            if sheet in SUPERVISION_SHEETS:
-                added, repeated = _load_supervision_sheet(connection, sheet, frame, carga_id)
-            else:
-                added, repeated = _load_recorridos(connection, frame, carga_id)
+            try:
+                if sheet in SUPERVISION_SHEETS:
+                    added, repeated = _load_supervision_sheet(
+                        connection, sheet, frame, carga_id
+                    )
+                else:
+                    added, repeated = _load_recorridos(
+                        connection, frame, carga_id
+                    )
+            except Exception as exc:
+                raise ETLError(
+                    f"Error al cargar la hoja {sheet}: {exc}"
+                ) from exc
             inserted += added
             duplicates += repeated
             details[sheet] = added
