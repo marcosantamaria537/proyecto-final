@@ -275,12 +275,20 @@ with st.sidebar:
     ignore_index=True,
 )
 
+all_dates = pd.concat(
+    [
+        supervisions["fecha"],
+        recorridos["fecha"],
+    ],
+    ignore_index=True,
+)
+
 all_dates = pd.to_datetime(
     all_dates,
     errors="coerce",
 ).dropna()
 
-# Permite abrir la aplicación aunque la base esté vacía.
+# Fechas predeterminadas cuando la base está vacía.
 if all_dates.empty:
     min_date = date.today()
     max_date = date.today()
@@ -288,27 +296,29 @@ else:
     min_date = all_dates.min().date()
     max_date = all_dates.max().date()
 
-    selected_dates = st.date_input(
-        "Periodo",
-        value=(
-            min_date,
-            max_date,
-        ),
-        min_value=min_date,
-        max_value=max_date,
-    )
+# Se inicializan siempre para evitar NameError.
+start_date = min_date
+end_date = max_date
 
-    if (
-        isinstance(selected_dates, tuple)
-        and len(selected_dates) == 2
-    ):
-        start_date, end_date = selected_dates
-    else:
-        start_date = end_date = (
-            selected_dates
-            if isinstance(selected_dates, date)
-            else min_date
-        )
+selected_dates = st.date_input(
+    "Periodo",
+    value=(min_date, max_date),
+    min_value=min_date,
+    max_value=max_date,
+)
+
+# Streamlit puede devolver una fecha, lista o tupla.
+if isinstance(selected_dates, (tuple, list)):
+    if len(selected_dates) == 2:
+        start_date = selected_dates[0]
+        end_date = selected_dates[1]
+    elif len(selected_dates) == 1:
+        start_date = selected_dates[0]
+        end_date = selected_dates[0]
+
+elif isinstance(selected_dates, date):
+    start_date = selected_dates
+    end_date = selected_dates
 
     # Obtener todos los nombres de polígonos.
     polygon_values = pd.concat(
