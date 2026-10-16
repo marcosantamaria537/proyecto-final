@@ -194,6 +194,10 @@ except DatabaseLoadError as exc:
 
     st.stop()
 
+# Valores predeterminados para permitir que la aplicación
+# funcione cuando la base de datos está vacía.
+selected_polygons: list[str] = []
+selected_faults: list[str] = []
 
 with st.sidebar:
     st.markdown(
