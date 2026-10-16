@@ -23,68 +23,71 @@ def _polygon_key(value: object) -> str:
     return normalized
 
 
-def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Prepara los totales para el mapa.
+def _prepare_polygon_counts(
+    faults: pd.DataFrame,
+) -> pd.DataFrame:
+    """Agrupa y suma las faltas de todas las variantes de cada polígono."""
 
-    Admite:
-    1. Una tabla consolidada con las columnas: poligono y faltas.
-    2. Supervisiones individuales con: poligono y num_faltas.
-    """
-
-    if data.empty or "poligono" not in data.columns:
+    if faults.empty:
         return pd.DataFrame(
-            columns=["poligono_clave", "faltas"]
+            columns=[
+                "poligono_clave",
+                "faltas",
+            ]
         )
 
-    work = data.copy()
+    working = faults.copy()
 
-    work["poligono_clave"] = (
-        work["poligono"]
-        .map(_polygon_key)
+    # Convertir las faltas a valores numéricos.
+    working["num_faltas"] = pd.to_numeric(
+        working["num_faltas"],
+        errors="coerce",
+    ).fillna(0)
+
+    # Normalizar el nombre recibido desde PostgreSQL.
+    normalized = (
+        working["poligono"]
+        .fillna("")
+        .astype(str)
+        .map(normalize_name)
     )
 
-    # Si ya recibimos la tabla consolidada de la captura
-    if "faltas" in work.columns:
-        work["faltas_mapa"] = pd.to_numeric(
-            work["faltas"],
-            errors="coerce",
-        ).fillna(0)
-
-    # Si recibimos las supervisiones sin agrupar
-    elif "num_faltas" in work.columns:
-        work["faltas_mapa"] = pd.to_numeric(
-            work["num_faltas"],
-            errors="coerce",
-        ).fillna(0)
-
-    # Alternativa cuando solamente existe es_falta
-    elif "es_falta" in work.columns:
-        work["faltas_mapa"] = (
-            work["es_falta"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .isin(["TRUE", "1", "SI", "SÍ"])
-            .astype(int)
-        )
-
-    else:
-        work["faltas_mapa"] = 0
-
-    polygon_counts = (
-        work[
-            work["poligono_clave"].isin(
-                ["poligono_1", "poligono_2", "poligono_3"]
+    # Unificar todas las variantes en uno de los tres polígonos.
+    working["poligono_clave"] = normalized.map(
+        lambda value: (
+            "poligono 1"
+            if (
+                "poligono 1" in value
+                or "isla mujeres" in value
+                or "zona de influencia" in value
             )
-        ]
-        .groupby(
+            else "poligono 2"
+            if (
+                "poligono 2" in value
+                or "punta cancun" in value
+                or "puerto juarez" in value
+                or "benito juarez" in value
+            )
+            else "poligono 3"
+            if (
+                "poligono 3" in value
+                or "punta nizuc" in value
+            )
+            else value
+        )
+    )
+
+    # Sumar num_faltas, no contar los nombres encontrados.
+    polygon_counts = (
+        working.groupby(
             "poligono_clave",
             as_index=False,
-        )["faltas_mapa"]
-        .sum()
-        .rename(
-            columns={"faltas_mapa": "faltas"}
+        )
+        .agg(
+            faltas=(
+                "num_faltas",
+                "sum",
+            )
         )
     )
 
