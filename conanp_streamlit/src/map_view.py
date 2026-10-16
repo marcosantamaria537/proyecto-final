@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import re
+import unicodedata
 from typing import Iterator
 
 import folium
@@ -9,9 +10,6 @@ import pandas as pd
 import streamlit as st
 from branca.colormap import linear
 from streamlit_folium import st_folium
-
-from src.data import normalize_name
-
 
 POLYGON_NAMES = {
     "poligono_1": "POLÍGONO 1 COSTA OCCIDENTAL DE ISLA MUJERES",
@@ -21,15 +19,28 @@ POLYGON_NAMES = {
 
 
 def _polygon_key(value: object) -> str:
-    """Asigna las variantes de nombre a uno de los tres polígonos."""
+    """Asigna cualquier variante de nombre a uno de los tres polígonos."""
 
-    normalized = normalize_name("" if value is None else str(value))
+    if value is None or pd.isna(value):
+        return "sin_clasificar"
 
-    # Dar prioridad al número explícito del polígono.
+    # Normalización independiente: elimina acentos y convierte cualquier
+    # signo, guion o guion bajo en un espacio. Así PostgreSQL y el GeoJSON
+    # producen exactamente las mismas claves.
+    normalized = unicodedata.normalize("NFKD", str(value))
+    normalized = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+    normalized = normalized.casefold()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+    # Dar prioridad al número explícito del polígono y evitar que
+    # "POLÍGONO 10" sea interpretado como "POLÍGONO 1".
     match = re.search(
         r"\bpoligono\s*0*(1|2|3)\b",
         normalized,
-        flags=re.IGNORECASE,
     )
     if match:
         return f"poligono_{int(match.group(1))}"
@@ -53,7 +64,7 @@ def _polygon_key(value: object) -> str:
     if "punta nizuc" in normalized:
         return "poligono_3"
 
-    return normalized
+    return "sin_clasificar"
 
 
 def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
