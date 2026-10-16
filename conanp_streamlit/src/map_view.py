@@ -13,90 +13,81 @@ from streamlit_folium import st_folium
 from src.data import normalize_name
 
 
+POLYGON_NAMES = {
+    "poligono_1": "POLÍGONO 1 COSTA OCCIDENTAL DE ISLA MUJERES",
+    "poligono_2": "POLÍGONO 2 PUNTA CANCÚN",
+    "poligono_3": "POLÍGONO 3 PUNTA NIZUC",
+}
+
+
 def _polygon_key(value: object) -> str:
-    """Relaciona nombres largos y cortos mediante el número del polígono."""
+    """Asigna las variantes de nombre a uno de los tres polígonos."""
 
     normalized = normalize_name("" if value is None else str(value))
-    match = re.search(r"\bpoligono\s*0*(\d+)\b", normalized, flags=re.IGNORECASE)
+
+    # Dar prioridad al número explícito del polígono.
+    match = re.search(
+        r"\bpoligono\s*0*(1|2|3)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     if match:
         return f"poligono_{int(match.group(1))}"
+
+    # Variantes históricas asociadas al Polígono 1.
+    if (
+        "isla mujeres" in normalized
+        or "zona de influencia" in normalized
+    ):
+        return "poligono_1"
+
+    # Variantes históricas asociadas al Polígono 2.
+    if (
+        "punta cancun" in normalized
+        or "puerto juarez" in normalized
+        or "benito juarez" in normalized
+    ):
+        return "poligono_2"
+
+    # Variantes históricas asociadas al Polígono 3.
+    if "punta nizuc" in normalized:
+        return "poligono_3"
+
     return normalized
 
 
-def _prepare_polygon_counts(
-    faults: pd.DataFrame,
-) -> pd.DataFrame:
+def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
     """Agrupa y suma las faltas de todas las variantes de cada polígono."""
 
-    if faults.empty:
-        return pd.DataFrame(
-            columns=[
-                "poligono_clave",
-                "faltas",
-            ]
-        )
+    required_columns = {"poligono", "num_faltas"}
+    if data.empty or not required_columns.issubset(data.columns):
+        return pd.DataFrame(columns=["poligono_clave", "faltas"])
 
-    working = faults.copy()
-
-    # Convertir las faltas a valores numéricos.
+    working = data.copy()
     working["num_faltas"] = pd.to_numeric(
         working["num_faltas"],
         errors="coerce",
     ).fillna(0)
-
-    # Normalizar el nombre recibido desde PostgreSQL.
-    normalized = (
+    working["poligono_clave"] = (
         working["poligono"]
         .fillna("")
-        .astype(str)
-        .map(normalize_name)
+        .map(_polygon_key)
     )
 
-    # Unificar todas las variantes en uno de los tres polígonos.
-    working["poligono_clave"] = normalized.map(
-        lambda value: (
-            "poligono 1"
-            if (
-                "poligono 1" in value
-                or "isla mujeres" in value
-                or "zona de influencia" in value
-            )
-            else "poligono 2"
-            if (
-                "poligono 2" in value
-                or "punta cancun" in value
-                or "puerto juarez" in value
-                or "benito juarez" in value
-            )
-            else "poligono 3"
-            if (
-                "poligono 3" in value
-                or "punta nizuc" in value
-            )
-            else value
-        )
-    )
+    # Evita que nombres no reconocidos alteren la escala del mapa.
+    working = working[
+        working["poligono_clave"].isin(POLYGON_NAMES)
+    ].copy()
 
-    # Sumar num_faltas, no contar los nombres encontrados.
     polygon_counts = (
-        working.groupby(
-            "poligono_clave",
-            as_index=False,
-        )
-        .agg(
-            faltas=(
-                "num_faltas",
-                "sum",
-            )
-        )
+        working.groupby("poligono_clave", as_index=False)
+        .agg(faltas=("num_faltas", "sum"))
     )
-
     polygon_counts["faltas"] = (
         polygon_counts["faltas"]
         .round()
         .astype(int)
     )
-
     return polygon_counts
 
 
@@ -106,22 +97,32 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
     prepared = copy.deepcopy(geojson)
     count_map = dict(
         zip(
-            polygon_counts.get("poligono_clave", pd.Series(dtype=str)),
-            polygon_counts.get("faltas", pd.Series(dtype=float)),
+            polygon_counts.get(
+                "poligono_clave",
+                pd.Series(dtype=str),
+            ),
+            polygon_counts.get(
+                "faltas",
+                pd.Series(dtype=float),
+            ),
         )
     )
 
     for feature in prepared.get("features", []):
         properties = feature.setdefault("properties", {})
-        key = _polygon_key(
+        source_name = (
             properties.get("poligono")
             or properties.get("nombre")
             or properties.get("name")
             or properties.get("sector")
             or ""
         )
+        key = _polygon_key(source_name)
+
         properties["__poligono_clave"] = key
-        properties["faltas_registradas"] = int(round(count_map.get(key, 0)))
+        properties["faltas_registradas"] = int(
+            round(count_map.get(key, 0))
+        )
         properties.setdefault("poligono", "SIN ESPECIFICAR")
         properties.setdefault("sector", "SIN ESPECIFICAR")
         properties.setdefault("superficie_declarada_ha", 0)
@@ -130,6 +131,8 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
 
 
 def _iterate_coordinates(coordinates: list) -> Iterator[tuple[float, float]]:
+    """Recorre las coordenadas de geometrías Polygon y MultiPolygon."""
+
     if (
         isinstance(coordinates, list)
         and len(coordinates) >= 2
@@ -145,10 +148,14 @@ def _iterate_coordinates(coordinates: list) -> Iterator[tuple[float, float]]:
 
 
 def _fit_geojson_bounds(map_object: folium.Map, geojson: dict) -> None:
+    """Ajusta la vista del mapa a la extensión del GeoJSON."""
+
     points: list[tuple[float, float]] = []
     for feature in geojson.get("features", []):
         geometry = feature.get("geometry") or {}
-        points.extend(_iterate_coordinates(geometry.get("coordinates") or []))
+        points.extend(
+            _iterate_coordinates(geometry.get("coordinates") or [])
+        )
 
     if not points:
         return
@@ -163,7 +170,10 @@ def _fit_geojson_bounds(map_object: folium.Map, geojson: dict) -> None:
     )
 
 
-def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
+def render_surveillance_map(
+    data: pd.DataFrame,
+    geojson: dict | None,
+) -> None:
     """Muestra los polígonos coloreados según sus faltas registradas."""
 
     coordinates = pd.DataFrame()
@@ -189,7 +199,7 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
         polygon_counts = _prepare_polygon_counts(data)
         prepared = _prepare_geojson(geojson, polygon_counts)
 
-        # Capa de referencia, visible también cuando un polígono no tiene faltas.
+        # Capa base visible incluso cuando un polígono no tiene faltas.
         folium.GeoJson(
             prepared,
             name="Zonas marinas",
@@ -204,7 +214,10 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
         positive_values = [
             feature.get("properties", {}).get("faltas_registradas", 0)
             for feature in prepared.get("features", [])
-            if feature.get("properties", {}).get("faltas_registradas", 0) > 0
+            if feature.get("properties", {}).get(
+                "faltas_registradas",
+                0,
+            ) > 0
         ]
 
         if positive_values:
@@ -218,10 +231,13 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
 
             def fault_style(feature: dict) -> dict:
                 value = feature.get("properties", {}).get(
-                    "faltas_registradas", 0
+                    "faltas_registradas",
+                    0,
                 )
                 return {
-                    "fillColor": color_scale(value) if value > 0 else "#DCE5E8",
+                    "fillColor": (
+                        color_scale(value) if value > 0 else "#DCE5E8"
+                    ),
                     "fillOpacity": 0.82 if value > 0 else 0.35,
                     "color": "#174A5B",
                     "weight": 2.5,
@@ -239,7 +255,7 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
             ).add_to(map_object)
             color_scale.add_to(map_object)
 
-        # Capa independiente para conservar el tooltip y el control existente.
+        # Capa independiente para mostrar información al pasar el cursor.
         folium.GeoJson(
             prepared,
             name="Información de las zonas",
@@ -273,7 +289,9 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
 
         _fit_geojson_bounds(map_object, prepared)
     else:
-        st.warning("No se encontró el archivo GeoJSON de los polígonos marinos.")
+        st.warning(
+            "No se encontró el archivo GeoJSON de los polígonos marinos."
+        )
 
     folium.LayerControl(collapsed=False).add_to(map_object)
     st_folium(
@@ -287,16 +305,51 @@ def render_surveillance_map(data: pd.DataFrame, geojson: dict | None) -> None:
         st.caption("No hay supervisiones para los filtros seleccionados.")
         return
 
-    aggregation = {
-        "supervisiones": (
-            "supervision_id",
-            "nunique",
-        ) if "supervision_id" in data.columns else ("poligono", "size"),
-        "faltas": ("num_faltas", "sum")
-        if "num_faltas" in data.columns else ("poligono", "size"),
-    }
-    counts = data.groupby("poligono", as_index=False).agg(**aggregation)
-    counts["faltas"] = pd.to_numeric(counts["faltas"], errors="coerce").fillna(0)
+    required_table_columns = {"poligono", "num_faltas"}
+    if not required_table_columns.issubset(data.columns):
+        st.caption("No existen columnas suficientes para generar el resumen.")
+        return
+
+    # La tabla utiliza la misma clasificación aplicada al mapa.
+    table_data = data.copy()
+    table_data["poligono_clave"] = (
+        table_data["poligono"]
+        .fillna("")
+        .map(_polygon_key)
+    )
+    table_data = table_data[
+        table_data["poligono_clave"].isin(POLYGON_NAMES)
+    ].copy()
+    table_data["num_faltas"] = pd.to_numeric(
+        table_data["num_faltas"],
+        errors="coerce",
+    ).fillna(0)
+
+    if table_data.empty:
+        st.caption("No hay datos asociados a los tres polígonos.")
+        return
+
+    if "supervision_id" in table_data.columns:
+        counts = (
+            table_data.groupby("poligono_clave", as_index=False)
+            .agg(
+                supervisiones=("supervision_id", "nunique"),
+                faltas=("num_faltas", "sum"),
+            )
+        )
+    else:
+        counts = (
+            table_data.groupby("poligono_clave", as_index=False)
+            .agg(
+                supervisiones=("poligono", "size"),
+                faltas=("num_faltas", "sum"),
+            )
+        )
+
+    counts["poligono"] = counts["poligono_clave"].map(POLYGON_NAMES)
+    counts["faltas"] = counts["faltas"].round().astype(int)
+    counts = counts[["poligono", "supervisiones", "faltas"]]
+
     st.dataframe(
         counts.sort_values("faltas", ascending=False),
         use_container_width=True,
