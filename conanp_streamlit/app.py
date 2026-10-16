@@ -268,13 +268,23 @@ with st.sidebar:
     st.markdown("### Filtros")
 
     all_dates = pd.concat(
-        [
-            supervisions["fecha"],
-            recorridos["fecha"],
-        ],
-        ignore_index=True,
-    ).dropna()
+    [
+        supervisions["fecha"],
+        recorridos["fecha"],
+    ],
+    ignore_index=True,
+)
 
+all_dates = pd.to_datetime(
+    all_dates,
+    errors="coerce",
+).dropna()
+
+# Permite abrir la aplicación aunque la base esté vacía.
+if all_dates.empty:
+    min_date = date.today()
+    max_date = date.today()
+else:
     min_date = all_dates.min().date()
     max_date = all_dates.max().date()
 
