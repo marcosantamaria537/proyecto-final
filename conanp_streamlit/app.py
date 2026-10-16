@@ -268,61 +268,52 @@ with st.sidebar:
                 f"polígonos: {exc}"
             )
 
-    st.divider()
+        st.divider()
     st.markdown("### Filtros")
 
     all_dates = pd.concat(
-    [
-        supervisions["fecha"],
-        recorridos["fecha"],
-    ],
-    ignore_index=True,
-)
+        [
+            supervisions["fecha"],
+            recorridos["fecha"],
+        ],
+        ignore_index=True,
+    )
 
-all_dates = pd.concat(
-    [
-        supervisions["fecha"],
-        recorridos["fecha"],
-    ],
-    ignore_index=True,
-)
+    all_dates = pd.to_datetime(
+        all_dates,
+        errors="coerce",
+    ).dropna()
 
-all_dates = pd.to_datetime(
-    all_dates,
-    errors="coerce",
-).dropna()
+    # Fechas predeterminadas cuando la base está vacía.
+    if all_dates.empty:
+        min_date = date.today()
+        max_date = date.today()
+    else:
+        min_date = all_dates.min().date()
+        max_date = all_dates.max().date()
 
-# Fechas predeterminadas cuando la base está vacía.
-if all_dates.empty:
-    min_date = date.today()
-    max_date = date.today()
-else:
-    min_date = all_dates.min().date()
-    max_date = all_dates.max().date()
+    start_date = min_date
+    end_date = max_date
 
-# Se inicializan siempre para evitar NameError.
-start_date = min_date
-end_date = max_date
+    selected_dates = st.date_input(
+        "Periodo",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date,
+    )
 
-selected_dates = st.date_input(
-    "Periodo",
-    value=(min_date, max_date),
-    min_value=min_date,
-    max_value=max_date,
-)
+    # Interpretar correctamente el resultado.
+    if isinstance(selected_dates, (tuple, list)):
+        if len(selected_dates) == 2:
+            start_date = selected_dates[0]
+            end_date = selected_dates[1]
+        elif len(selected_dates) == 1:
+            start_date = selected_dates[0]
+            end_date = selected_dates[0]
 
-# Streamlit puede devolver una fecha, lista o tupla.
-if isinstance(selected_dates, (tuple, list)):
-    if len(selected_dates) == 2:
-        start_date = selected_dates[0]
-        end_date = selected_dates[1]
-    elif len(selected_dates) == 1:
-        start_date = selected_dates[0]
-        end_date = selected_dates[0]
-
-elif isinstance(selected_dates, date):
-    start_date = selected_dates
-    end_date = selected_dates
+    elif isinstance(selected_dates, date):
+        start_date = selected_dates
+        end_date = selected_dates
 
     # Obtener todos los nombres de polígonos.
     polygon_values = pd.concat(
@@ -333,8 +324,6 @@ elif isinstance(selected_dates, date):
         ignore_index=True,
     ).dropna()
 
-    # Eliminar nombres repetidos aunque tengan
-    # espacios, acentos o mayúsculas diferentes.
     polygon_labels: dict[str, str] = {}
 
     for value in polygon_values:
@@ -354,20 +343,24 @@ elif isinstance(selected_dates, date):
 
     selected_polygons = st.multiselect(
         "Polígono",
-        polygon_options,
+        options=polygon_options,
         placeholder="Todos",
     )
 
-    fault_options = sorted(
-        fault_details["tipo_falta"]
-        .dropna()
-        .astype(str)
-        .unique()
-    )
+    if "tipo_falta" in fault_details.columns:
+        fault_options = sorted(
+            fault_details["tipo_falta"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+    else:
+        fault_options = []
 
     selected_faults = st.multiselect(
         "Tipo de falta",
-        fault_options,
+        options=fault_options,
         placeholder="Todos",
     )
 
