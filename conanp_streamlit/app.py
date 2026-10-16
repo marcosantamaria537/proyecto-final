@@ -929,6 +929,9 @@ with quality_tab:
     st.markdown(
         "#### Controles del modelo"
     )
+    
+with etl_tab:
+    render_etl_tab(connection)
 
     controls = connection.query(
         """
