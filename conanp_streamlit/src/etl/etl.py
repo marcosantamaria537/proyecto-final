@@ -211,6 +211,60 @@ def _time_text(value: Any) -> str | None:
         return value.strftime("%H:%M:%S")
     return _clean_text(value)
 
+def _parse_excel_date(value: Any) -> pd.Timestamp:
+    """
+    Convierte fechas de Excel y rechaza valores que solamente
+    representan horas o fechas fuera del periodo válido.
+    """
+
+    if value is None or pd.isna(value):
+        return pd.NaT
+
+    # Una hora aislada no debe convertirse en fecha.
+    if isinstance(value, time):
+        return pd.NaT
+
+    # Números seriales utilizados internamente por Excel.
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+    ):
+        number = float(value)
+
+        # Los seriales de fecha razonables de Excel.
+        if 1 <= number <= 100000:
+            parsed = (
+                pd.Timestamp("1899-12-30")
+                + pd.to_timedelta(number, unit="D")
+            )
+        else:
+            return pd.NaT
+
+    else:
+        parsed = pd.to_datetime(
+            value,
+            errors="coerce",
+            dayfirst=True,
+        )
+
+    if pd.isna(parsed):
+        return pd.NaT
+
+    parsed = pd.Timestamp(parsed)
+
+    # Los datos reales del proyecto comienzan después de 2010.
+    minimum_date = pd.Timestamp("2010-01-01")
+    maximum_date = (
+        pd.Timestamp.today().normalize()
+        + pd.DateOffset(years=1)
+    )
+
+    if parsed < minimum_date or parsed > maximum_date:
+        return pd.NaT
+
+    # Conservar únicamente la fecha.
+    return parsed.normalize()
+
 
 def _rename_source(frame: pd.DataFrame, mapping: dict[str, list[str]]) -> pd.DataFrame:
     source = {_key(column): column for column in frame.columns}
@@ -272,7 +326,10 @@ def _prepare_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     renamed = _rename_source(frame, FALTAS_MAP)
     columns = list(FALTAS_MAP)
     result = _select_columns(renamed, columns)
-    result["fecha_supervision"] = pd.to_datetime(result["fecha_supervision"], errors="coerce")
+    result["fecha_supervision"] = (
+    result["fecha_supervision"]
+    .map(_parse_excel_date)
+)
     valid = result["fecha_supervision"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
@@ -299,7 +356,10 @@ def _prepare_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def _prepare_sin_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     renamed = _rename_source(frame, SIN_FALTAS_MAP)
     result = _select_columns(renamed, list(SIN_FALTAS_MAP))
-    result["fecha_supervision"] = pd.to_datetime(result["fecha_supervision"], errors="coerce")
+    result["fecha_supervision"] = (
+    result["fecha_supervision"]
+    .map(_parse_excel_date)
+)
     valid = result["fecha_supervision"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
@@ -318,7 +378,10 @@ def _prepare_sin_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
 def _prepare_recorridos(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     renamed = _rename_source(frame, RECORRIDOS_MAP)
     result = _select_columns(renamed, list(RECORRIDOS_MAP))
-    result["fecha_recorrido"] = pd.to_datetime(result["fecha_recorrido"], errors="coerce")
+    result["fecha_recorrido"] = (
+    result["fecha_recorrido"]
+    .map(_parse_excel_date)
+)
     valid = result["fecha_recorrido"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
