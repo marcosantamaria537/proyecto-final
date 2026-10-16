@@ -54,24 +54,59 @@ def build_monthly_trend(
 ):
     """Genera una evolución diaria, mensual o anual según el periodo."""
 
-    data = supervisions.copy()
+    working = supervisions.copy()
+
+    # Convierte las fechas y excluye años generados por horas aisladas de Excel.
+    working["fecha"] = pd.to_datetime(
+        working["fecha"],
+        errors="coerce",
+    )
+
+    current_year = pd.Timestamp.today().year
+    working = working[
+        working["fecha"].notna()
+        & working["fecha"].dt.year.between(
+            2010,
+            current_year + 1,
+        )
+    ].copy()
+
+    working["num_faltas"] = pd.to_numeric(
+        working["num_faltas"],
+        errors="coerce",
+    ).fillna(0)
 
     start = pd.Timestamp(start_date).normalize()
     end = pd.Timestamp(end_date).normalize()
 
-    data["fecha"] = pd.to_datetime(
-        data["fecha"],
-        errors="coerce",
-    )
+    # Evita que un valor inválido del selector extienda el eje hasta 1900.
+    minimum_allowed = pd.Timestamp("2010-01-01")
+    maximum_allowed = pd.Timestamp(f"{current_year + 1}-12-31")
 
-    data["num_faltas"] = pd.to_numeric(
-        data["num_faltas"],
-        errors="coerce",
-    ).fillna(0)
+    if start < minimum_allowed or start > maximum_allowed:
+        start = (
+            working["fecha"].min().normalize()
+            if not working.empty
+            else pd.Timestamp.today().normalize()
+        )
 
-    data = data.dropna(
-        subset=["fecha"]
-    )
+    if end < minimum_allowed or end > maximum_allowed:
+        end = (
+            working["fecha"].max().normalize()
+            if not working.empty
+            else start
+        )
+
+    if end < start:
+        start, end = end, start
+
+    # Conserva únicamente los datos del periodo mostrado.
+    working = working[
+        working["fecha"].between(
+            start,
+            end + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1),
+        )
+    ].copy()
 
     number_of_months = (
         (end.year - start.year) * 12
@@ -85,161 +120,57 @@ def build_monthly_trend(
         and start.month == end.month
     )
 
-    # Un solo mes: agrupación por día.
     if same_month:
         chart_title = "Evolución diaria"
         x_axis_title = "Día"
-
-        period_index = pd.date_range(
-            start=start,
-            end=end,
-            freq="D",
-            name="periodo",
-        )
-
-        data["periodo"] = (
-            data["fecha"].dt.normalize()
-        )
-
-        labels = period_index.strftime(
-            "%d/%m"
-        ).tolist()
-
-    # Entre 2 y 24 meses: agrupación mensual.
+        period_index = pd.date_range(start=start, end=end, freq="D", name="periodo")
+        working["periodo"] = working["fecha"].dt.normalize()
+        labels = period_index.strftime("%d/%m").tolist()
     elif number_of_months <= 24:
-        frequency = "M"
         chart_title = "Evolución mensual"
         x_axis_title = "Mes"
-
-        period_index = pd.period_range(
-            start=start,
-            end=end,
-            freq="M",
-            name="periodo",
-        )
-
-        data["periodo"] = (
-            data["fecha"].dt.to_period("M")
-        )
-
-        month_names = [
-            "Ene",
-            "Feb",
-            "Mar",
-            "Abr",
-            "May",
-            "Jun",
-            "Jul",
-            "Ago",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dic",
-        ]
-
-        labels = [
-            f"{month_names[period.month - 1]} "
-            f"{period.year}"
-            for period in period_index
-        ]
-
-    # Más de 24 meses: agrupación anual.
+        period_index = pd.period_range(start=start, end=end, freq="M", name="periodo")
+        working["periodo"] = working["fecha"].dt.to_period("M")
+        month_names = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        labels = [f"{month_names[period.month - 1]} {period.year}" for period in period_index]
     else:
-        frequency = "Y"
         chart_title = "Evolución anual"
         x_axis_title = "Año"
+        period_index = pd.period_range(start=start, end=end, freq="Y", name="periodo")
+        working["periodo"] = working["fecha"].dt.to_period("Y")
+        labels = [str(period.year) for period in period_index]
 
-        period_index = pd.period_range(
-            start=start,
-            end=end,
-            freq="Y",
-            name="periodo",
-        )
-
-        data["periodo"] = (
-            data["fecha"].dt.to_period("Y")
-        )
-
-        labels = [
-            str(period.year)
-            for period in period_index
-        ]
-
-    if data.empty:
+    if working.empty:
         summary = pd.DataFrame(
-            {
-                "supervisiones": 0,
-                "incidencias": 0,
-            },
+            {"supervisiones": 0, "incidencias": 0},
             index=period_index,
         )
-
     else:
         summary = (
-            data.groupby("periodo")
+            working.groupby("periodo")
             .agg(
-                supervisiones=(
-                    "supervision_id",
-                    "nunique",
-                ),
-                incidencias=(
-                    "num_faltas",
-                    "sum",
-                ),
+                supervisiones=("supervision_id", "nunique"),
+                incidencias=("num_faltas", "sum"),
             )
-            .reindex(
-                period_index,
-                fill_value=0,
-            )
+            .reindex(period_index, fill_value=0)
         )
 
     summary = summary.reset_index()
     summary["etiqueta"] = labels
 
     figure = go.Figure()
-
-    figure.add_trace(
-        go.Scatter(
-            x=summary["etiqueta"],
-            y=summary["supervisiones"],
-            mode="lines+markers",
-            name="Supervisiones",
-            line={
-                "color": "#00866A",
-                "width": 3,
-            },
-            marker={
-                "size": 8,
-            },
-            hovertemplate=(
-                f"{x_axis_title}: %{{x}}<br>"
-                "Supervisiones: %{y}"
-                "<extra></extra>"
-            ),
-        )
-    )
-
-    figure.add_trace(
-        go.Scatter(
-            x=summary["etiqueta"],
-            y=summary["incidencias"],
-            mode="lines+markers",
-            name="Incidencias",
-            line={
-                "color": "#D9A321",
-                "width": 3,
-            },
-            marker={
-                "size": 8,
-            },
-            hovertemplate=(
-                f"{x_axis_title}: %{{x}}<br>"
-                "Incidencias: %{y}"
-                "<extra></extra>"
-            ),
-        )
-    )
-
+    figure.add_trace(go.Scatter(
+        x=summary["etiqueta"], y=summary["supervisiones"],
+        mode="lines+markers", name="Supervisiones",
+        line={"color": "#00866A", "width": 3}, marker={"size": 8},
+        hovertemplate=f"{x_axis_title}: %{{x}}<br>Supervisiones: %{{y}}<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=summary["etiqueta"], y=summary["incidencias"],
+        mode="lines+markers", name="Incidencias",
+        line={"color": "#D9A321", "width": 3}, marker={"size": 8},
+        hovertemplate=f"{x_axis_title}: %{{x}}<br>Incidencias: %{{y}}<extra></extra>",
+    ))
     figure.update_layout(
         title=chart_title,
         hovermode="x unified",
@@ -250,26 +181,10 @@ def build_monthly_trend(
             "categoryarray": labels,
             "tickangle": -45,
         },
-        yaxis={
-            "title": "Registros",
-            "rangemode": "tozero",
-            "tickformat": ",d",
-        },
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "xanchor": "right",
-            "x": 1,
-        },
-        margin={
-            "l": 40,
-            "r": 20,
-            "t": 70,
-            "b": 70,
-        },
+        yaxis={"title": "Registros", "rangemode": "tozero", "tickformat": ",d"},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        margin={"l": 40, "r": 20, "t": 70, "b": 70},
     )
-
     return figure
 
 
@@ -284,8 +199,8 @@ def build_fault_type_chart(data: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(title=None)
     return _style(fig, "Faltas por categoría")
 
-################################################################### FUERA DE FUNCIONAMIENTO ###################################
-def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure: 
+
+def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
     order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
     faults = data.loc[data["es_falta"]]
     matrix = faults.pivot_table(index="dia_semana", columns="hora_num", values="num_faltas", aggfunc="sum", fill_value=0)
@@ -299,7 +214,6 @@ def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(title=None)
     return _style(fig, "Concentración por día y hora")
 
-#########################################################################################################################
 
 def build_measure_chart(data: pd.DataFrame) -> go.Figure:
     measures = data.loc[data["es_falta"], "medida_tomada"].fillna("Sin registro").value_counts().head(6).rename_axis("medida").reset_index(name="registros")
@@ -308,238 +222,61 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
     fig.update_layout(showlegend=True, legend={"orientation": "h", "y": -0.08})
     return _style(fig, "Medidas tomadas")
 
-def build_recurrence_chart(
-    data: pd.DataFrame,
-) -> go.Figure:
+
+def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     """Muestra embarcaciones con faltas en fechas distintas."""
-
     figure = go.Figure()
-
-    required_columns = {
-        "embarcacion_anonima",
-        "fecha",
-        "es_falta",
-        "supervision_id",
-        "num_faltas",
-    }
+    required_columns = {"embarcacion_anonima", "fecha", "es_falta", "supervision_id", "num_faltas"}
 
     if data.empty or not required_columns.issubset(data.columns):
-        figure.add_annotation(
-            text="No hay información de reincidencia disponible",
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            showarrow=False,
-        )
-
-        figure.update_layout(
-            title="Embarcaciones con mayor reincidencia",
-            height=520,
-            xaxis={"visible": False},
-            yaxis={"visible": False},
-        )
-
+        figure.add_annotation(text="No hay información de reincidencia disponible", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
+        figure.update_layout(title="Embarcaciones con mayor reincidencia", height=520, xaxis={"visible": False}, yaxis={"visible": False})
         return figure
 
-    faults = data[
-        data["es_falta"].fillna(False)
-    ].copy()
-
-    faults["fecha"] = pd.to_datetime(
-        faults["fecha"],
-        errors="coerce",
-    )
-
-    faults["num_faltas"] = pd.to_numeric(
-        faults["num_faltas"],
-        errors="coerce",
-    ).fillna(0)
-
+    faults = data[data["es_falta"].fillna(False)].copy()
+    faults["fecha"] = pd.to_datetime(faults["fecha"], errors="coerce")
+    faults["num_faltas"] = pd.to_numeric(faults["num_faltas"], errors="coerce").fillna(0)
     faults["embarcacion_id"] = (
-        faults["embarcacion_anonima"]
-        .astype(str)
-        .str.replace("\u00a0", " ", regex=False)
-        .str.strip()
-        .str.upper()
-        .str.replace(
-            r"\s+",
-            " ",
-            regex=True,
-        )
+        faults["embarcacion_anonima"].astype(str)
+        .str.replace("\u00a0", " ", regex=False).str.strip().str.upper()
+        .str.replace(r"\s+", " ", regex=True)
     )
-
-    invalid_identifiers = {
-        "",
-        "NAN",
-        "NONE",
-        "N/A",
-        "SIN DATO",
-        "SIN DATOS",
-        "SIN REGISTRO",
-        "NO IDENTIFICADA",
-        "NO IDENTIFICADO",
-        "DESCONOCIDA",
-        "DESCONOCIDO",
-    }
-
-    faults = faults[
-        ~faults["embarcacion_id"].isin(
-            invalid_identifiers
-        )
-    ].dropna(
-        subset=["fecha"]
-    )
-
-    faults["fecha_dia"] = (
-        faults["fecha"].dt.normalize()
-    )
-
+    invalid_identifiers = {"", "NAN", "NONE", "N/A", "SIN DATO", "SIN DATOS", "SIN REGISTRO", "NO IDENTIFICADA", "NO IDENTIFICADO", "DESCONOCIDA", "DESCONOCIDO"}
+    faults = faults[~faults["embarcacion_id"].isin(invalid_identifiers)].dropna(subset=["fecha"])
+    faults["fecha_dia"] = faults["fecha"].dt.normalize()
     recurrence = (
-        faults.groupby(
-            "embarcacion_id",
-            as_index=False,
-        )
+        faults.groupby("embarcacion_id", as_index=False)
         .agg(
-            fechas_con_falta=(
-                "fecha_dia",
-                "nunique",
-            ),
-            registros_con_falta=(
-                "supervision_id",
-                "nunique",
-            ),
-            incidencias=(
-                "num_faltas",
-                "sum",
-            ),
-            ultima_fecha=(
-                "fecha",
-                "max",
-            ),
+            fechas_con_falta=("fecha_dia", "nunique"),
+            registros_con_falta=("supervision_id", "nunique"),
+            incidencias=("num_faltas", "sum"),
+            ultima_fecha=("fecha", "max"),
         )
     )
-
-    # Reincidencia: faltas en dos o más fechas diferentes.
-    recurrence = recurrence[
-        recurrence["fechas_con_falta"] >= 2
-    ]
+    recurrence = recurrence[recurrence["fechas_con_falta"] >= 2]
 
     if recurrence.empty:
-        figure.add_annotation(
-            text=(
-                "No se encontraron embarcaciones reincidentes "
-                "en el periodo seleccionado"
-            ),
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            showarrow=False,
-        )
-
-        figure.update_layout(
-            title="Embarcaciones con mayor reincidencia",
-            height=520,
-            xaxis={"visible": False},
-            yaxis={"visible": False},
-        )
-
+        figure.add_annotation(text="No se encontraron embarcaciones reincidentes en el periodo seleccionado", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
+        figure.update_layout(title="Embarcaciones con mayor reincidencia", height=520, xaxis={"visible": False}, yaxis={"visible": False})
         return figure
 
-    recurrence = (
-        recurrence.sort_values(
-            [
-                "fechas_con_falta",
-                "incidencias",
-            ],
-            ascending=False,
-        )
-        .head(10)
-        .sort_values(
-            "fechas_con_falta",
-            ascending=True,
-        )
-    )
-
-    recurrence["ultima_fecha_texto"] = (
-        recurrence["ultima_fecha"]
-        .dt.strftime("%d/%m/%Y")
-    )
-
-    recurrence["nivel"] = recurrence[
-        "fechas_con_falta"
-    ].apply(
-        lambda value: (
-            "Alta reincidencia"
-            if value >= 4
-            else "Reincidencia"
-        )
-    )
-
-    colors = recurrence["nivel"].map(
-        {
-            "Reincidencia": "#D9A321",
-            "Alta reincidencia": "#C44E52",
-        }
-    )
-
-    custom_data = recurrence[
-        [
-            "registros_con_falta",
-            "incidencias",
-            "ultima_fecha_texto",
-            "nivel",
-        ]
-    ].to_numpy()
-
-    figure.add_trace(
-        go.Bar(
-            x=recurrence["fechas_con_falta"],
-            y=recurrence["embarcacion_id"],
-            orientation="h",
-            marker_color=colors,
-            text=recurrence["fechas_con_falta"],
-            textposition="outside",
-            customdata=custom_data,
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Fechas distintas con falta: %{x}<br>"
-                "Supervisiones con falta: %{customdata[0]}<br>"
-                "Incidencias registradas: %{customdata[1]}<br>"
-                "Última fecha: %{customdata[2]}<br>"
-                "Clasificación: %{customdata[3]}"
-                "<extra></extra>"
-            ),
-        )
-    )
-
+    recurrence = recurrence.sort_values(["fechas_con_falta", "incidencias"], ascending=False).head(10).sort_values("fechas_con_falta", ascending=True)
+    recurrence["ultima_fecha_texto"] = recurrence["ultima_fecha"].dt.strftime("%d/%m/%Y")
+    recurrence["nivel"] = recurrence["fechas_con_falta"].apply(lambda value: "Alta reincidencia" if value >= 4 else "Reincidencia")
+    colors = recurrence["nivel"].map({"Reincidencia": "#D9A321", "Alta reincidencia": "#C44E52"})
+    custom_data = recurrence[["registros_con_falta", "incidencias", "ultima_fecha_texto", "nivel"]].to_numpy()
+    figure.add_trace(go.Bar(
+        x=recurrence["fechas_con_falta"], y=recurrence["embarcacion_id"],
+        orientation="h", marker_color=colors, text=recurrence["fechas_con_falta"],
+        textposition="outside", customdata=custom_data,
+        hovertemplate=("<b>%{y}</b><br>Fechas distintas con falta: %{x}<br>Supervisiones con falta: %{customdata[0]}<br>Incidencias registradas: %{customdata[1]}<br>Última fecha: %{customdata[2]}<br>Clasificación: %{customdata[3]}<extra></extra>"),
+    ))
     figure.update_layout(
-        title={
-            "text": "Embarcaciones con mayor reincidencia",
-            "x": 0.02,
-            "xanchor": "left",
-        },
+        title={"text": "Embarcaciones con mayor reincidencia", "x": 0.02, "xanchor": "left"},
         height=520,
-        xaxis={
-            "title": "Fechas distintas con falta",
-            "rangemode": "tozero",
-            "tickmode": "auto",
-            "nticks": 8,
-            "tickformat": "d",
-            "automargin": True,
-        },
-        yaxis={
-            "title": "",
-            "automargin": True,
-        },
+        xaxis={"title": "Fechas distintas con falta", "rangemode": "tozero", "tickmode": "auto", "nticks": 8, "tickformat": "d", "automargin": True},
+        yaxis={"title": "", "automargin": True},
         showlegend=False,
-        margin={
-            "l": 125,
-            "r": 35,
-            "t": 70,
-            "b": 70,
-        },
+        margin={"l": 125, "r": 35, "t": 70, "b": 70},
     )
-
     return figure
