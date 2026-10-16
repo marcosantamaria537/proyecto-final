@@ -24,20 +24,43 @@ def _polygon_key(value: object) -> str:
 
 
 def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
-    """Suma las faltas y genera la clave usada para unir datos y GeoJSON."""
+    """
+    Prepara los totales para el mapa.
+
+    Admite:
+    1. Una tabla consolidada con las columnas: poligono y faltas.
+    2. Supervisiones individuales con: poligono y num_faltas.
+    """
 
     if data.empty or "poligono" not in data.columns:
-        return pd.DataFrame(columns=["poligono_clave", "faltas"])
+        return pd.DataFrame(
+            columns=["poligono_clave", "faltas"]
+        )
 
     work = data.copy()
-    work["poligono_clave"] = work["poligono"].map(_polygon_key)
 
-    if "num_faltas" in work.columns:
-        work["faltas"] = pd.to_numeric(
-            work["num_faltas"], errors="coerce"
+    work["poligono_clave"] = (
+        work["poligono"]
+        .map(_polygon_key)
+    )
+
+    # Si ya recibimos la tabla consolidada de la captura
+    if "faltas" in work.columns:
+        work["faltas_mapa"] = pd.to_numeric(
+            work["faltas"],
+            errors="coerce",
         ).fillna(0)
+
+    # Si recibimos las supervisiones sin agrupar
+    elif "num_faltas" in work.columns:
+        work["faltas_mapa"] = pd.to_numeric(
+            work["num_faltas"],
+            errors="coerce",
+        ).fillna(0)
+
+    # Alternativa cuando solamente existe es_falta
     elif "es_falta" in work.columns:
-        work["faltas"] = (
+        work["faltas_mapa"] = (
             work["es_falta"]
             .astype(str)
             .str.strip()
@@ -45,14 +68,33 @@ def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
             .isin(["TRUE", "1", "SI", "SÍ"])
             .astype(int)
         )
-    else:
-        work["faltas"] = 0
 
-    return (
-        work.loc[work["poligono_clave"].ne("")]
-        .groupby("poligono_clave", as_index=False)["faltas"]
+    else:
+        work["faltas_mapa"] = 0
+
+    polygon_counts = (
+        work[
+            work["poligono_clave"].isin(
+                ["poligono_1", "poligono_2", "poligono_3"]
+            )
+        ]
+        .groupby(
+            "poligono_clave",
+            as_index=False,
+        )["faltas_mapa"]
         .sum()
+        .rename(
+            columns={"faltas_mapa": "faltas"}
+        )
     )
+
+    polygon_counts["faltas"] = (
+        polygon_counts["faltas"]
+        .round()
+        .astype(int)
+    )
+
+    return polygon_counts
 
 
 def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
