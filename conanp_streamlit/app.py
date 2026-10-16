@@ -485,10 +485,10 @@ if (
     and filtered_recorridos.empty
 ):
     st.warning(
-        "No hay registros que coincidan "
-        "con los filtros seleccionados."
+        "La base de datos está vacía. "
+        "Utiliza la pestaña Carga ETL para importar "
+        "los nuevos archivos."
     )
-    st.stop()
 
 
 (
@@ -895,9 +895,7 @@ with records_tab:
 
 
 with quality_tab:
-    quality = quality_summary(
-        supervisions
-    )
+    quality = quality_summary(supervisions)
 
     q1, q2, q3 = st.columns(3)
 
@@ -916,9 +914,7 @@ with quality_tab:
         f"{quality['poligonos_identificados_pct']:.1f}%",
     )
 
-    st.markdown(
-        "#### Campos con valores faltantes"
-    )
+    st.markdown("#### Campos con valores faltantes")
 
     st.dataframe(
         quality["faltantes"],
@@ -926,27 +922,29 @@ with quality_tab:
         hide_index=True,
     )
 
-    st.markdown(
-        "#### Controles del modelo"
-    )
-    
-with etl_tab:
-    render_etl_tab(connection)
+    st.markdown("#### Controles del modelo")
 
-    controls = connection.query(
-        """
-        SELECT *
-        FROM dw.vw_control_calidad
-        ORDER BY control
-        """,
-        ttl=0,
-    )
+    try:
+        controls = connection.query(
+            """
+            SELECT *
+            FROM dw.vw_control_calidad
+            ORDER BY control
+            """,
+            ttl=0,
+        )
 
-    st.dataframe(
-        controls,
-        use_container_width=True,
-        hide_index=True,
-    )
+        st.dataframe(
+            controls,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    except Exception as exc:
+        st.info(
+            "Los controles de calidad estarán disponibles "
+            "después de cargar los datos."
+        )
 
 
 with etl_tab:
