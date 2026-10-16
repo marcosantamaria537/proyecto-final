@@ -552,33 +552,7 @@ with overview_tab:
 
 
 with spatial_tab:
-    st.write(
-    "Diagnóstico del mapa:",
-    {
-        "filas": len(filtered_supervisions),
-        "supervisiones": (
-            filtered_supervisions["supervision_id"].nunique()
-            if "supervision_id" in filtered_supervisions.columns
-            else 0
-        ),
-        "faltas": (
-            pd.to_numeric(
-                filtered_supervisions["num_faltas"],
-                errors="coerce",
-            ).fillna(0).sum()
-            if "num_faltas" in filtered_supervisions.columns
-            else 0
-        ),
-        "poligonos": (
-            filtered_supervisions["poligono"]
-            .fillna("SIN POLÍGONO")
-            .value_counts()
-            .to_dict()
-            if "poligono" in filtered_supervisions.columns
-            else {}
-        ),
-    },
-)
+   
     render_surveillance_map(
         filtered_supervisions,
         polygons_geojson,
