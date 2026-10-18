@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 st.set_page_config(
     page_title="Administración de datos | CONANP",
-    page_icon="🗃️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
