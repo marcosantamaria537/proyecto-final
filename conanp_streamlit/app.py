@@ -32,7 +32,6 @@ DEFAULT_GEOJSON_PATH = (
 
 st.set_page_config(
     page_title="Vigilancia CONANP",
-    page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -201,13 +200,13 @@ with st.sidebar:
     st.page_link(
         "app.py",
         label="Tablero principal",
-        icon="🏠",
+        
     )
 
     st.page_link(
         "pages/2_Administracion_de_datos.py",
         label="Calidad de datos y ETL",
-        icon="🗃️",
+       
     )
 
     st.divider()
