@@ -206,31 +206,20 @@ def render_surveillance_map(
         control_scale=True,
     )
 
-    # Mapa base principal: diferencia con claridad la tierra y el mar.
-    # Se mantiene separado de las capas GeoJSON, por lo que no modifica
-    # los polígonos, su escala de colores ni la información emergente.
+    # Un solo fondo que muestra simultáneamente tierra y mar.
     folium.TileLayer(
         tiles=(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/"
-            "Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
+            "https://{s}.basemaps.cartocdn.com/rastertiles/"
+            "voyager/{z}/{x}/{y}{r}.png"
         ),
-        attr="Tiles © Esri",
-        name="Océano y costa",
+        attr="© OpenStreetMap contributors © CARTO",
+        name="Mapa base: tierra y mar",
         overlay=False,
-        control=True,
+        control=False,
         show=True,
     ).add_to(map_object)
 
-    # Positron queda disponible como mapa base alternativo en el
-    # selector de capas situado en la esquina superior derecha.
-    folium.TileLayer(
-        tiles="CartoDB positron",
-        name="Positron",
-        overlay=False,
-        control=True,
-        show=False,
-    ).add_to(map_object)
-
+   
     if geojson:
         polygon_counts = _prepare_polygon_counts(data)
         prepared = _prepare_geojson(geojson, polygon_counts)
