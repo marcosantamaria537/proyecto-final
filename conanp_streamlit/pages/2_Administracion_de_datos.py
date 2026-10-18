@@ -76,8 +76,6 @@ with st.sidebar:
     )
 
 st.title("Administración de datos")
-
-st.title("Administración de datos")
 st.caption(
     "Consulta la calidad de la información y carga nuevos archivos mediante el ETL."
 )
