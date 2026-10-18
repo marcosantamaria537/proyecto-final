@@ -11,3 +11,7 @@ maxUploadSize = 200
 [browser]
 gatherUsageStats = false
 
+[client]
+# Oculta la navegación automática que Streamlit crea antes de ejecutar app.py.
+# Los enlaces se agregan manualmente después de validar la contraseña.
+showSidebarNavigation = false
