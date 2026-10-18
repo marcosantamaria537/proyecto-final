@@ -52,6 +52,31 @@ def require_optional_password() -> None:
 apply_styles()
 require_optional_password()
 
+# Panel lateral propio de esta página.
+with st.sidebar:
+    st.markdown("### Navegación")
+
+    st.page_link(
+        "app.py",
+        label="Tablero principal",
+        icon="🏠",
+    )
+
+    st.page_link(
+        "pages/2_Administracion_de_datos.py",
+        label="Calidad de datos y ETL",
+        icon="🗃️",
+    )
+
+    st.divider()
+
+    st.caption(
+        "Módulo de administración, "
+        "calidad y carga de datos."
+    )
+
+st.title("Administración de datos")
+
 st.title("Administración de datos")
 st.caption(
     "Consulta la calidad de la información y carga nuevos archivos mediante el ETL."
