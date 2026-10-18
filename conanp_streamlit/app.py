@@ -14,8 +14,7 @@ from src.analytics import (
     build_recurrence_chart,
     calculate_kpis,
 )
-from src.data import load_geojson_bytes, normalize_name, quality_summary
-from src.etl_view import render_etl_tab
+from src.data import load_geojson_bytes, normalize_name
 from src.map_view import render_surveillance_map
 from src.postgres_data import (
     DatabaseLoadError,
@@ -33,6 +32,7 @@ DEFAULT_GEOJSON_PATH = (
 
 st.set_page_config(
     page_title="Vigilancia CONANP",
+    page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -194,10 +194,6 @@ except DatabaseLoadError as exc:
 
     st.stop()
 
-# Valores predeterminados para permitir que la aplicación
-# funcione cuando la base de datos está vacía.
-selected_polygons: list[str] = []
-selected_faults: list[str] = []
 
 with st.sidebar:
     st.markdown(
@@ -268,7 +264,7 @@ with st.sidebar:
                 f"polígonos: {exc}"
             )
 
-        st.divider()
+    st.divider()
     st.markdown("### Filtros")
 
     all_dates = pd.concat(
@@ -277,43 +273,32 @@ with st.sidebar:
             recorridos["fecha"],
         ],
         ignore_index=True,
-    )
-
-    all_dates = pd.to_datetime(
-        all_dates,
-        errors="coerce",
     ).dropna()
 
-    # Fechas predeterminadas cuando la base está vacía.
-    if all_dates.empty:
-        min_date = date.today()
-        max_date = date.today()
-    else:
-        min_date = all_dates.min().date()
-        max_date = all_dates.max().date()
-
-    start_date = min_date
-    end_date = max_date
+    min_date = all_dates.min().date()
+    max_date = all_dates.max().date()
 
     selected_dates = st.date_input(
         "Periodo",
-        value=(min_date, max_date),
+        value=(
+            min_date,
+            max_date,
+        ),
         min_value=min_date,
         max_value=max_date,
     )
 
-    # Interpretar correctamente el resultado.
-    if isinstance(selected_dates, (tuple, list)):
-        if len(selected_dates) == 2:
-            start_date = selected_dates[0]
-            end_date = selected_dates[1]
-        elif len(selected_dates) == 1:
-            start_date = selected_dates[0]
-            end_date = selected_dates[0]
-
-    elif isinstance(selected_dates, date):
-        start_date = selected_dates
-        end_date = selected_dates
+    if (
+        isinstance(selected_dates, tuple)
+        and len(selected_dates) == 2
+    ):
+        start_date, end_date = selected_dates
+    else:
+        start_date = end_date = (
+            selected_dates
+            if isinstance(selected_dates, date)
+            else min_date
+        )
 
     # Obtener todos los nombres de polígonos.
     polygon_values = pd.concat(
@@ -324,6 +309,8 @@ with st.sidebar:
         ignore_index=True,
     ).dropna()
 
+    # Eliminar nombres repetidos aunque tengan
+    # espacios, acentos o mayúsculas diferentes.
     polygon_labels: dict[str, str] = {}
 
     for value in polygon_values:
@@ -343,24 +330,20 @@ with st.sidebar:
 
     selected_polygons = st.multiselect(
         "Polígono",
-        options=polygon_options,
+        polygon_options,
         placeholder="Todos",
     )
 
-    if "tipo_falta" in fault_details.columns:
-        fault_options = sorted(
-            fault_details["tipo_falta"]
-            .dropna()
-            .astype(str)
-            .unique()
-            .tolist()
-        )
-    else:
-        fault_options = []
+    fault_options = sorted(
+        fault_details["tipo_falta"]
+        .dropna()
+        .astype(str)
+        .unique()
+    )
 
     selected_faults = st.multiselect(
         "Tipo de falta",
-        options=fault_options,
+        fault_options,
         placeholder="Todos",
     )
 
@@ -478,25 +461,21 @@ if (
     and filtered_recorridos.empty
 ):
     st.warning(
-        "La base de datos está vacía. "
-        "Utiliza la pestaña Carga ETL para importar "
-        "los nuevos archivos."
+        "No hay registros que coincidan "
+        "con los filtros seleccionados."
     )
+    st.stop()
 
 
 (
     overview_tab,
     spatial_tab,
     records_tab,
-    quality_tab,
-    etl_tab,
 ) = st.tabs(
     [
         "Resumen",
         "Análisis espacial",
         "Registros",
-        "Calidad de datos",
-        "Carga ETL",
     ]
 )
 
@@ -552,7 +531,6 @@ with overview_tab:
 
 
 with spatial_tab:
-   
     render_surveillance_map(
         filtered_supervisions,
         polygons_geojson,
@@ -886,63 +864,6 @@ with records_tab:
         mime="text/csv",
         key="download_filtered_recorridos",
     )
-
-
-with quality_tab:
-    quality = quality_summary(supervisions)
-
-    q1, q2, q3 = st.columns(3)
-
-    q1.metric(
-        "Supervisiones cargadas",
-        f"{quality['registros']:,}",
-    )
-
-    q2.metric(
-        "Fechas válidas",
-        f"{quality['fechas_validas_pct']:.1f}%",
-    )
-
-    q3.metric(
-        "Polígonos identificados",
-        f"{quality['poligonos_identificados_pct']:.1f}%",
-    )
-
-    st.markdown("#### Campos con valores faltantes")
-
-    st.dataframe(
-        quality["faltantes"],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    st.markdown("#### Controles del modelo")
-
-    try:
-        controls = connection.query(
-            """
-            SELECT *
-            FROM dw.vw_control_calidad
-            ORDER BY control
-            """,
-            ttl=0,
-        )
-
-        st.dataframe(
-            controls,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-    except Exception as exc:
-        st.info(
-            "Los controles de calidad estarán disponibles "
-            "después de cargar los datos."
-        )
-
-
-with etl_tab:
-    render_etl_tab(connection)
 
 
 st.caption(
