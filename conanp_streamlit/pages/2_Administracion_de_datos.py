@@ -59,7 +59,7 @@ with st.sidebar:
     st.page_link(
         "app.py",
         label="Tablero principal",
-        icon="🏠",
+        
     )
 
     st.page_link(
