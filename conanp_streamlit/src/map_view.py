@@ -275,7 +275,7 @@ def render_surveillance_map(
                 style_function=fault_style,
                 highlight_function=lambda _: {
                     "color": "#FF8C00",
-                    "weight": 0,
+                    "weight": 1,
                     "fillOpacity": 0.1,
                 },
             ).add_to(map_object)
@@ -288,7 +288,7 @@ def render_surveillance_map(
             style_function=lambda _: {
                 "fillOpacity": 0,
                 "color": "#174A5B",
-                "weight": 0,
+                "weight": 1,
             },
             highlight_function=lambda _: {
                 "fillOpacity": 0,
