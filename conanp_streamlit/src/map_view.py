@@ -233,7 +233,7 @@ def render_surveillance_map(
                 "fillColor": "#70C5E8",
                 "fillOpacity": 0.5,
                 "color": "#174A5B",
-                "weight": 2,
+                "weight": 0,
             },
         ).add_to(map_object)
 
