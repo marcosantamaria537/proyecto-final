@@ -266,7 +266,7 @@ def render_surveillance_map(
                     ),
                     "fillOpacity": 0.55 if value > 0 else 0.20,
                     "color": "#174A5B",
-                    "weight": 2,
+                    "weight": 1.5,
                 }
 
             folium.GeoJson(
