@@ -55,6 +55,7 @@ def build_monthly_trend(
     """Genera una evolución diaria, mensual o anual según el periodo."""
 
     working = supervisions.copy()
+    routes_working = recorridos.copy()
 
     # Convierte las fechas y excluye años generados por horas aisladas de Excel.
     working["fecha"] = pd.to_datetime(
@@ -66,6 +67,23 @@ def build_monthly_trend(
     working = working[
         working["fecha"].notna()
         & working["fecha"].dt.year.between(
+            2010,
+            current_year + 1,
+        )
+    ].copy()
+
+    # Prepara las fechas de los recorridos con las mismas reglas aplicadas
+    # a las supervisiones, evitando también fechas erróneas del año 1900.
+    if "fecha" not in routes_working.columns:
+        routes_working["fecha"] = pd.NaT
+
+    routes_working["fecha"] = pd.to_datetime(
+        routes_working["fecha"],
+        errors="coerce",
+    )
+    routes_working = routes_working[
+        routes_working["fecha"].notna()
+        & routes_working["fecha"].dt.year.between(
             2010,
             current_year + 1,
         )
@@ -107,6 +125,12 @@ def build_monthly_trend(
             end + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1),
         )
     ].copy()
+    routes_working = routes_working[
+        routes_working["fecha"].between(
+            start,
+            end + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1),
+        )
+    ].copy()
 
     number_of_months = (
         (end.year - start.year) * 12
@@ -125,12 +149,14 @@ def build_monthly_trend(
         x_axis_title = "Día"
         period_index = pd.date_range(start=start, end=end, freq="D", name="periodo")
         working["periodo"] = working["fecha"].dt.normalize()
+        routes_working["periodo"] = routes_working["fecha"].dt.normalize()
         labels = period_index.strftime("%d/%m").tolist()
     elif number_of_months <= 24:
         chart_title = "Evolución mensual"
         x_axis_title = "Mes"
         period_index = pd.period_range(start=start, end=end, freq="M", name="periodo")
         working["periodo"] = working["fecha"].dt.to_period("M")
+        routes_working["periodo"] = routes_working["fecha"].dt.to_period("M")
         month_names = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
         labels = [f"{month_names[period.month - 1]} {period.year}" for period in period_index]
     else:
@@ -138,6 +164,7 @@ def build_monthly_trend(
         x_axis_title = "Año"
         period_index = pd.period_range(start=start, end=end, freq="Y", name="periodo")
         working["periodo"] = working["fecha"].dt.to_period("Y")
+        routes_working["periodo"] = routes_working["fecha"].dt.to_period("Y")
         labels = [str(period.year) for period in period_index]
 
     if working.empty:
@@ -155,6 +182,27 @@ def build_monthly_trend(
             .reindex(period_index, fill_value=0)
         )
 
+    # Cuenta cada recorrido una sola vez. Si no existe recorrido_id, cada fila
+    # se considera un recorrido para mantener compatibilidad con otros Excel.
+    if routes_working.empty:
+        route_counts = pd.Series(0, index=period_index, name="recorridos")
+    elif "recorrido_id" in routes_working.columns:
+        route_counts = (
+            routes_working.groupby("periodo")["recorrido_id"]
+            .nunique()
+            .reindex(period_index, fill_value=0)
+            .rename("recorridos")
+        )
+    else:
+        route_counts = (
+            routes_working.groupby("periodo")
+            .size()
+            .reindex(period_index, fill_value=0)
+            .rename("recorridos")
+        )
+
+    summary["recorridos"] = route_counts.astype(int)
+
     summary = summary.reset_index()
     summary["etiqueta"] = labels
 
@@ -170,6 +218,12 @@ def build_monthly_trend(
         mode="lines+markers", name="Incidencias",
         line={"color": "#D9A321", "width": 3}, marker={"size": 8},
         hovertemplate=f"{x_axis_title}: %{{x}}<br>Incidencias: %{{y}}<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=summary["etiqueta"], y=summary["recorridos"],
+        mode="lines+markers", name="Recorridos",
+        line={"color": "#2878B5", "width": 3}, marker={"size": 8},
+        hovertemplate=f"{x_axis_title}: %{{x}}<br>Recorridos: %{{y}}<extra></extra>",
     ))
     figure.update_layout(
         title=chart_title,
