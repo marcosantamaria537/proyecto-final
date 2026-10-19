@@ -17,6 +17,10 @@ POLYGON_NAMES = {
     "poligono_3": "POLÍGONO 3 PUNTA NIZUC",
 }
 
+# Transparencia del cuadro de información del mapa.
+# 0.0 = invisible; 1.0 = completamente sólido.
+TOOLTIP_OPACITY = 0.72
+
 
 def _polygon_key(value: object) -> str:
     """Asigna cualquier variante de nombre a uno de los tres polígonos."""
@@ -310,6 +314,36 @@ def render_surveillance_map(
         ).add_to(map_object)
 
         _fit_geojson_bounds(map_object, prepared)
+
+        # Personaliza el cuadro que aparece al pasar el cursor sobre un
+        # polígono. El uso de rgba permite mostrar el mapa detrás del texto.
+        map_object.get_root().html.add_child(
+            folium.Element(
+                f"""
+                <style>
+                .foliumtooltip {{
+                    background-color: rgba(
+                        255, 255, 255, {TOOLTIP_OPACITY}
+                    ) !important;
+                    border: 1px solid rgba(
+                        23, 74, 91, 0.35
+                    ) !important;
+                    box-shadow: 0 2px 8px rgba(
+                        0, 0, 0, 0.20
+                    ) !important;
+                }}
+
+                .foliumtooltip table,
+                .foliumtooltip tbody,
+                .foliumtooltip tr,
+                .foliumtooltip th,
+                .foliumtooltip td {{
+                    background-color: transparent !important;
+                }}
+                </style>
+                """
+            )
+        )
     else:
         st.warning(
             "No se encontró el archivo GeoJSON de los polígonos marinos."
