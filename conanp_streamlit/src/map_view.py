@@ -7,6 +7,7 @@ from typing import Iterator
 
 import folium
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from branca.colormap import linear
 from streamlit_folium import st_folium
@@ -233,7 +234,7 @@ def render_surveillance_map(
                 "fillColor": "#70C5E8",
                 "fillOpacity": 0.5,
                 "color": "#174A5B",
-                "weight": 1,
+                "weight": 2,
             },
         ).add_to(map_object)
 
@@ -266,7 +267,7 @@ def render_surveillance_map(
                     ),
                     "fillOpacity": 0.55 if value > 0 else 0.20,
                     "color": "#174A5B",
-                    "weight": 0,
+                    "weight": 2.5,
                 }
 
             folium.GeoJson(
@@ -275,7 +276,7 @@ def render_surveillance_map(
                 style_function=fault_style,
                 highlight_function=lambda _: {
                     "color": "#FF8C00",
-                    "weight": 1,
+                    "weight": 4,
                     "fillOpacity": 0.1,
                 },
             ).add_to(map_object)
@@ -288,7 +289,7 @@ def render_surveillance_map(
             style_function=lambda _: {
                 "fillOpacity": 0,
                 "color": "#174A5B",
-                "weight": 1,
+                "weight": 2,
             },
             highlight_function=lambda _: {
                 "fillOpacity": 0,
@@ -406,8 +407,88 @@ def render_surveillance_map(
     counts["faltas"] = counts["faltas"].round().astype(int)
     counts = counts[["poligono", "supervisiones", "faltas"]]
 
-    st.dataframe(
-        counts.sort_values("faltas", ascending=False),
+    counts = counts.sort_values(
+        "faltas",
+        ascending=True,
+    )
+
+    # Gráfica comparativa que sustituye a la tabla inferior del mapa.
+    comparison_figure = go.Figure()
+    comparison_figure.add_trace(
+        go.Bar(
+            name="Supervisiones",
+            y=counts["poligono"],
+            x=counts["supervisiones"],
+            orientation="h",
+            marker_color="#00866A",
+            text=counts["supervisiones"],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Supervisiones: %{x:,}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    comparison_figure.add_trace(
+        go.Bar(
+            name="Faltas",
+            y=counts["poligono"],
+            x=counts["faltas"],
+            orientation="h",
+            marker_color="#D9A321",
+            text=counts["faltas"],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Faltas registradas: %{x:,}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    comparison_figure.update_layout(
+        title={
+            "text": "Supervisiones y faltas por polígono",
+            "x": 0,
+            "xanchor": "left",
+        },
+        barmode="group",
+        height=390,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={
+            "family": "Inter, system-ui, sans-serif",
+            "color": "#16352D",
+        },
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+        },
+        margin={
+            "l": 20,
+            "r": 55,
+            "t": 75,
+            "b": 45,
+        },
+        xaxis={
+            "title": "Registros",
+            "rangemode": "tozero",
+            "tickformat": ",d",
+            "gridcolor": "#E1EBE7",
+            "zeroline": False,
+        },
+        yaxis={
+            "title": "",
+            "automargin": True,
+        },
+    )
+
+    st.plotly_chart(
+        comparison_figure,
         use_container_width=True,
-        hide_index=True,
     )
