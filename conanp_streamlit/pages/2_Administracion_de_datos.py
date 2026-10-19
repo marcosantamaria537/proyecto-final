@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 st.set_page_config(
     page_title="Administración de datos | CONANP",
+    page_icon="🗃️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -51,27 +52,19 @@ def require_optional_password() -> None:
 apply_styles()
 require_optional_password()
 
-# Panel lateral propio de esta página.
+# La navegación se crea solamente después de validar la contraseña.
 with st.sidebar:
-    st.markdown("### Navegación")
-
     st.page_link(
         "app.py",
         label="Tablero principal",
-        
+        icon="🏠",
     )
-
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calidad de datos y Carga de datos",
+        label="Administración de datos",
+        icon="🗃️",
     )
-
     st.divider()
-
-    st.caption(
-        "Módulo de administración, "
-        "calidad y carga de datos."
-    )
 
 st.title("Administración de datos")
 st.caption(
@@ -92,7 +85,7 @@ except DatabaseLoadError as exc:
 quality_tab, etl_tab = st.tabs(
     [
         "Calidad de datos",
-        "Carga de datos",
+        "Carga ETL",
     ]
 )
 
@@ -108,10 +101,23 @@ with quality_tab:
     )
 
     st.markdown("#### Campos con valores faltantes")
+
+    missing_fields = quality["faltantes"].loc[
+        :,
+        ["campo", "porcentaje"],
+    ].copy()
+
     st.dataframe(
-        quality["faltantes"],
+        missing_fields,
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "campo": st.column_config.TextColumn("Campo"),
+            "porcentaje": st.column_config.NumberColumn(
+                "Porcentaje",
+                format="%.1f%%",
+            ),
+        },
     )
 
     st.markdown("#### Controles del modelo")
