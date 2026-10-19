@@ -287,7 +287,7 @@ def render_surveillance_map(
                 "weight": 2,
             },
             highlight_function=lambda _: {
-                "fillOpacity": 0.5,
+                "fillOpacity": 0,
                 "color": "#FF8C00",
                 "weight": 4,
             },
