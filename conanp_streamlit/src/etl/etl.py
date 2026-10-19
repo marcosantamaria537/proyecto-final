@@ -190,9 +190,20 @@ def _key(value: Any) -> str:
 
 
 def _clean_text(value: Any, default: str | None = None) -> str | None:
+    """Limpia espacios, saltos de línea y caracteres invisibles."""
+
     if value is None or pd.isna(value):
         return default
-    cleaned = " ".join(str(value).replace("\u00a0", " ").split()).strip()
+
+    cleaned = str(value)
+    cleaned = (
+        cleaned
+        .replace("\u00a0", " ")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .replace("\t", " ")
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or default
 
 
@@ -203,13 +214,33 @@ def _db_value(value: Any) -> Any:
 
 
 def _time_text(value: Any) -> str | None:
+    """Convierte horas de Excel a HH:MM:SS sin crear fechas de 1900."""
+
     if value is None or pd.isna(value):
         return None
     if isinstance(value, time):
         return value.strftime("%H:%M:%S")
     if isinstance(value, (datetime, pd.Timestamp)):
         return value.strftime("%H:%M:%S")
-    return _clean_text(value)
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        if 0 <= number < 1:
+            total_seconds = int(round(number * 86400)) % 86400
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return None
+
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return None
+
+    parsed = pd.to_datetime(cleaned, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return pd.Timestamp(parsed).strftime("%H:%M:%S")
 
 def _parse_excel_date(value: Any) -> pd.Timestamp:
     """
@@ -231,14 +262,14 @@ def _parse_excel_date(value: Any) -> pd.Timestamp:
     ):
         number = float(value)
 
-        # Los seriales de fecha razonables de Excel.
-        if 1 <= number <= 100000:
-            parsed = (
-                pd.Timestamp("1899-12-30")
-                + pd.to_timedelta(number, unit="D")
-            )
-        else:
+        # Valores menores que uno representan únicamente una hora.
+        if number < 1 or number > 100000:
             return pd.NaT
+
+        parsed = (
+            pd.Timestamp("1899-12-30")
+            + pd.to_timedelta(number, unit="D")
+        )
 
     else:
         parsed = pd.to_datetime(
@@ -264,6 +295,67 @@ def _parse_excel_date(value: Any) -> pd.Timestamp:
 
     # Conservar únicamente la fecha.
     return parsed.normalize()
+
+
+def _normalize_polygon(value: Any) -> str:
+    """Unifica variantes de los tres polígonos principales."""
+
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return UNKNOWN
+
+    normalized = _key(cleaned)
+    polygon_numbers = set(
+        re.findall(r"\bPOLIGONO\s*0*([123])\b", normalized)
+    )
+
+    # En recorridos puede haber más de un polígono en la misma fila.
+    if len(polygon_numbers) > 1:
+        return ", ".join(
+            f"POLÍGONO {number}"
+            for number in sorted(polygon_numbers)
+        )
+
+    if (
+        "POLIGONO 1" in normalized
+        or "ISLA MUJERES" in normalized
+        or "ZONA DE INFLUENCIA DEL PNCOIMPCPN" in normalized
+        or normalized == "ZONA DE INFLUENCIA"
+    ):
+        return "POLÍGONO 1"
+
+    if (
+        "POLIGONO 2" in normalized
+        or "PUNTA CANCUN" in normalized
+        or "PUERTO JUAREZ" in normalized
+        or "BENITO JUAREZ" in normalized
+    ):
+        return "POLÍGONO 2"
+
+    if "POLIGONO 3" in normalized or "PUNTA NIZUC" in normalized:
+        return "POLÍGONO 3"
+
+    if normalized in {"", "NO", "NINGUNO", "N A"}:
+        return UNKNOWN
+
+    return cleaned.upper()
+
+
+def _clean_source_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Elimina filas/columnas vacías y limpia todas las celdas de texto."""
+
+    result = frame.copy()
+    result = result.dropna(axis=1, how="all")
+    result = result.dropna(axis=0, how="all").copy()
+
+    for column in result.columns:
+        if (
+            pd.api.types.is_object_dtype(result[column])
+            or pd.api.types.is_string_dtype(result[column])
+        ):
+            result[column] = result[column].map(_clean_text)
+
+    return result.reset_index(drop=True)
 
 
 def _rename_source(frame: pd.DataFrame, mapping: dict[str, list[str]]) -> pd.DataFrame:
@@ -323,20 +415,22 @@ def _classify_faults(value: Any) -> tuple[list[str], dict[str, int]]:
 
 
 def _prepare_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    frame = _clean_source_frame(frame)
     renamed = _rename_source(frame, FALTAS_MAP)
     columns = list(FALTAS_MAP)
     result = _select_columns(renamed, columns)
-    result["fecha_supervision"] = (
-    result["fecha_supervision"]
-    .map(_parse_excel_date)
-)
+    result["fecha_supervision"] = result["fecha_supervision"].map(
+        _parse_excel_date
+    )
     valid = result["fecha_supervision"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
     result["fecha_captura"] = pd.to_datetime(result["fecha_captura"], errors="coerce")
     result["fecha_registro"] = result["fecha_captura"]
     result["anio"] = result["fecha_supervision"].dt.year
+    result["mes"] = result["fecha_supervision"].dt.month
     result["hora_inicio"] = result["hora_inicio"].map(_time_text)
+    result["poligono"] = result["poligono"].map(_normalize_polygon)
     result["es_terrestre"] = result["actividad_terrestre"].map(
         lambda value: "SI" if _key(value) not in ("", "NO", _key(UNKNOWN)) else "NO"
     )
@@ -354,16 +448,18 @@ def _prepare_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _prepare_sin_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    frame = _clean_source_frame(frame)
     renamed = _rename_source(frame, SIN_FALTAS_MAP)
     result = _select_columns(renamed, list(SIN_FALTAS_MAP))
-    result["fecha_supervision"] = (
-    result["fecha_supervision"]
-    .map(_parse_excel_date)
-)
+    result["fecha_supervision"] = result["fecha_supervision"].map(
+        _parse_excel_date
+    )
     valid = result["fecha_supervision"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
     result["anio"] = result["fecha_supervision"].dt.year
+    result["mes"] = result["fecha_supervision"].dt.month
+    result["poligono"] = result["poligono"].map(_normalize_polygon)
     result["es_terrestre"] = result["actividad_terrestre"].map(
         lambda value: "SI" if _key(value) not in ("", "NO", _key(UNKNOWN)) else "NO"
     )
@@ -376,19 +472,21 @@ def _prepare_sin_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
 
 
 def _prepare_recorridos(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    frame = _clean_source_frame(frame)
     renamed = _rename_source(frame, RECORRIDOS_MAP)
     result = _select_columns(renamed, list(RECORRIDOS_MAP))
-    result["fecha_recorrido"] = (
-    result["fecha_recorrido"]
-    .map(_parse_excel_date)
-)
+    result["fecha_recorrido"] = result["fecha_recorrido"].map(
+        _parse_excel_date
+    )
     valid = result["fecha_recorrido"].notna()
     rejected = result.loc[~valid].copy()
     result = result.loc[valid].copy()
     result["fecha_captura"] = pd.to_datetime(result["fecha_captura"], errors="coerce")
     result["anio"] = result["fecha_recorrido"].dt.year
+    result["mes"] = result["fecha_recorrido"].dt.month
     result["hora_inicio"] = result["hora_inicio"].map(_time_text)
     result["hora_fin"] = result["hora_fin"].map(_time_text)
+    result["poligono"] = result["poligono"].map(_normalize_polygon)
     result["es_terrestre"] = result["actividad_terrestre"].map(
         lambda value: "SI" if _key(value) not in ("", "NO", _key(UNKNOWN)) else "NO"
     )
