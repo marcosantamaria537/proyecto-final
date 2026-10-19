@@ -227,7 +227,7 @@ def render_surveillance_map(
             name="Zonas marinas",
             style_function=lambda _: {
                 "fillColor": "#70C5E8",
-                "fillOpacity": 0.45,
+                "fillOpacity": 0.5,
                 "color": "#174A5B",
                 "weight": 2,
             },
