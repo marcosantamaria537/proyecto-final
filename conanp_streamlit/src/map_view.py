@@ -282,12 +282,12 @@ def render_surveillance_map(
             prepared,
             name="Información de las zonas",
             style_function=lambda _: {
-                "fillOpacity": -1,
+                "fillOpacity": -2,
                 "color": "#174A5B",
                 "weight": 2,
             },
             highlight_function=lambda _: {
-                "fillOpacity": -1,
+                "fillOpacity": -2,
                 "color": "#FF8C00",
                 "weight": 4,
             },
