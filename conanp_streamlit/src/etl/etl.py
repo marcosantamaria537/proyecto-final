@@ -341,6 +341,55 @@ def _normalize_polygon(value: Any) -> str:
     return cleaned.upper()
 
 
+def _normalize_measure(value: Any) -> str | None:
+    """Estandariza medidas tomadas y conserva combinaciones válidas."""
+
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return None
+
+    normalized = _key(cleaned)
+    if normalized in {
+        "NO",
+        "NINGUNA",
+        "NINGUNO",
+        "SIN MEDIDA",
+        "SIN ESPECIFICAR",
+    }:
+        return None
+
+    measures: list[str] = []
+
+    if "ACTA DE SUPERVISION" in normalized:
+        measures.append(
+            "ACTA DE SUPERVISIÓN EN ÁREA NATURAL PROTEGIDA FEDERAL"
+        )
+    if "LLAMADO DE ATENCION" in normalized:
+        measures.append("LLAMADO DE ATENCIÓN")
+    if "DESALOJO DEL AREA" in normalized:
+        measures.append("DESALOJO DEL ÁREA")
+    if "BOLETA" in normalized:
+        measures.append("BOLETA DE REPORTE")
+    if "DENUNCIA ANTE CAPITANIA" in normalized:
+        measures.append("DENUNCIA ANTE CAPITANÍA")
+    if (
+        "DECOMISO" in normalized
+        or "DECOMISAR" in normalized
+        or "RETENCION" in normalized
+    ):
+        measures.append("RETENCIÓN O DECOMISO")
+    if "CORTE DE BRAZALETES" in normalized:
+        measures.append("CORTE DE BRAZALETES")
+    if "TOMA DE DATOS" in normalized:
+        measures.append("TOMA DE DATOS")
+
+    if not measures:
+        return cleaned.upper()
+
+    # Evita repetir una misma medida dentro del registro y conserva el orden.
+    return ", ".join(dict.fromkeys(measures))
+
+
 def _clean_source_frame(frame: pd.DataFrame) -> pd.DataFrame:
     """Elimina filas/columnas vacías y limpia todas las celdas de texto."""
 
@@ -431,6 +480,9 @@ def _prepare_faltas(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     result["mes"] = result["fecha_supervision"].dt.month
     result["hora_inicio"] = result["hora_inicio"].map(_time_text)
     result["poligono"] = result["poligono"].map(_normalize_polygon)
+    result["medida_tomada"] = result["medida_tomada"].map(
+        _normalize_measure
+    )
     result["es_terrestre"] = result["actividad_terrestre"].map(
         lambda value: "SI" if _key(value) not in ("", "NO", _key(UNKNOWN)) else "NO"
     )
