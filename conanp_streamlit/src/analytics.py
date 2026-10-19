@@ -270,10 +270,61 @@ def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
 
 
 def build_measure_chart(data: pd.DataFrame) -> go.Figure:
-    measures = data.loc[data["es_falta"], "medida_tomada"].fillna("Sin registro").value_counts().head(6).rename_axis("medida").reset_index(name="registros")
-    fig = px.pie(measures, values="registros", names="medida", hole=0.62, color_discrete_sequence=[GREEN, TEAL, GOLD, "#5BAA93", "#9BC5B7", "#B6A05B"])
-    fig.update_traces(textposition="inside", textinfo="percent", hovertemplate="%{label}<br>%{value} (%{percent})<extra></extra>")
-    fig.update_layout(showlegend=True, legend={"orientation": "h", "y": -0.08})
+    measures = (
+        data.loc[data["es_falta"].fillna(False), "medida_tomada"]
+        .fillna("Sin registro")
+        .astype(str)
+        .str.strip()
+        .replace("", "Sin registro")
+        .value_counts()
+        .head(8)
+        .rename_axis("medida")
+        .reset_index(name="registros")
+    )
+
+    if measures.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No hay medidas registradas para los filtros seleccionados",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return _style(fig, "Medidas tomadas")
+
+    fig = px.treemap(
+        measures,
+        path=["medida"],
+        values="registros",
+        color="registros",
+        color_continuous_scale=[
+            "#DCEDE7",
+            TEAL,
+            GREEN,
+        ],
+    )
+    fig.update_traces(
+        texttemplate=(
+            "<b>%{label}</b><br>"
+            "%{value} registros<br>"
+            "%{percentRoot:.1%}"
+        ),
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Registros: %{value}<br>"
+            "Porcentaje: %{percentRoot:.1%}"
+            "<extra></extra>"
+        ),
+        marker={"line": {"color": "white", "width": 2}},
+    )
+    fig.update_layout(
+        coloraxis_showscale=False,
+        margin={"l": 8, "r": 8, "t": 55, "b": 8},
+    )
     return _style(fig, "Medidas tomadas")
 
 
