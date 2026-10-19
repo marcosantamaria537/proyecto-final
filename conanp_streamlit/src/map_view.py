@@ -234,7 +234,7 @@ def render_surveillance_map(
                 "fillColor": "#70C5E8",
                 "fillOpacity": 0.5,
                 "color": "#174A5B",
-                "weight": 2,
+                "weight": 0,
             },
         ).add_to(map_object)
 
@@ -267,7 +267,7 @@ def render_surveillance_map(
                     ),
                     "fillOpacity": 0.55 if value > 0 else 0.20,
                     "color": "#174A5B",
-                    "weight": 2.5,
+                    "weight": 0,
                 }
 
             folium.GeoJson(
@@ -277,7 +277,7 @@ def render_surveillance_map(
                 highlight_function=lambda _: {
                     "color": "#FF8C00",
                     "weight": 4,
-                    "fillOpacity": 0.1,
+                    "fillOpacity": 0,
                 },
             ).add_to(map_object)
             color_scale.add_to(map_object)
