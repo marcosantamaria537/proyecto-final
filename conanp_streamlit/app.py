@@ -496,24 +496,24 @@ if (
 
 
 with overview_tab:
-    # Primera fila
-    left, right = st.columns(
-        [1.6, 1],
+    # Primera fila: evolución temporal a todo el ancho.
+    st.plotly_chart(
+        build_monthly_trend(
+            filtered_supervisions,
+            filtered_recorridos,
+            start_date,
+            end_date,
+        ),
+        use_container_width=True,
+    )
+
+    # Segunda fila: análisis categórico en dos columnas iguales.
+    category_column, measure_column = st.columns(
+        [1, 1],
         gap="large",
     )
 
-    with left:
-        st.plotly_chart(
-            build_monthly_trend(
-                filtered_supervisions,
-                filtered_recorridos,
-                start_date,
-                end_date,
-            ),
-            use_container_width=True,
-        )
-
-    with right:
+    with category_column:
         st.plotly_chart(
             build_fault_type_chart(
                 filtered_fault_details
@@ -521,28 +521,22 @@ with overview_tab:
             use_container_width=True,
         )
 
-    # Segunda fila
-    # IMPORTANTE: debe estar fuera de "with right:"
-    left, right = st.columns(
-        [1.6, 1],
-        gap="large",
-    )
-
-    with left:
-        st.plotly_chart(
-            build_recurrence_chart(
-                filtered_supervisions
-            ),
-            use_container_width=True,
-        )
-
-    with right:
+    with measure_column:
         st.plotly_chart(
             build_measure_chart(
                 filtered_supervisions
             ),
             use_container_width=True,
         )
+
+    # Tercera fila: reincidencia a todo el ancho para evitar etiquetas
+    # amontonadas y facilitar la comparación entre embarcaciones.
+    st.plotly_chart(
+        build_recurrence_chart(
+            filtered_supervisions
+        ),
+        use_container_width=True,
+    )
 
 
 with spatial_tab:
