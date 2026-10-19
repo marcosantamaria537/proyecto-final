@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 st.set_page_config(
     page_title="Administración de datos | CONANP",
-    page_icon="🗃️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -57,12 +56,12 @@ with st.sidebar:
     st.page_link(
         "app.py",
         label="Tablero principal",
-        icon="🏠",
+       
     )
     st.page_link(
         "pages/2_Administracion_de_datos.py",
         label="Administración de datos",
-        icon="🗃️",
+       
     )
     st.divider()
 
