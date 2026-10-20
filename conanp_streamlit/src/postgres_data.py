@@ -124,9 +124,13 @@ def load_postgres_data(connection) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
         supervisions["num_faltas"], errors="coerce"
     ).fillna(0).astype(int)
     supervisions["es_falta"] = supervisions["es_falta"].fillna(False).astype(bool)
-    supervisions["embarcacion_anonima"] = supervisions["embarcacion"].map(
-        _anonymous_boat
-    )
+    supervisions["embarcacion_anonima"] = (
+    supervisions["embarcacion"]
+    .fillna("Sin registro")
+    .astype(str)
+    .str.strip()
+    .replace("", "Sin registro")
+)
     supervisions["tabla_origen"] = supervisions["fuente"]
     supervisions["tipo_falta"] = supervisions["tipos_falta"]
     supervisions["km_recorridos"] = 0.0
