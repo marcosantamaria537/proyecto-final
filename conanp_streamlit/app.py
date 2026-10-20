@@ -35,7 +35,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.caption("Versión: separación de medidas v2")
+
 
 def apply_styles() -> None:
     styles_path = ROOT / "assets" / "styles.css"
