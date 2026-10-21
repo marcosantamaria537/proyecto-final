@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -270,12 +270,50 @@ def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
 
 
 def build_measure_chart(data: pd.DataFrame) -> go.Figure:
+    """Separa y contabiliza individualmente las medidas tomadas."""
+
+    raw_measures = data.loc[
+        data["es_falta"].fillna(False),
+        "medida_tomada",
+    ].fillna("Sin registro")
+
+    separated_measures: list[str] = []
+
+    for raw_value in raw_measures:
+        clean_value = str(raw_value).replace("\u00a0", " ").strip()
+
+        parts = re.split(
+            r"\s*(?:,|;|\||/|\r?\n|\s+y\s+)\s*",
+            clean_value,
+            flags=re.IGNORECASE,
+        )
+
+        for part in parts:
+            normalized_part = re.sub(
+                r"\s+",
+                " ",
+                part,
+            ).strip()
+
+            if normalized_part:
+                separated_measures.append(normalized_part)
+
+    measure_values = pd.Series(
+        separated_measures,
+        dtype="object",
+    )
+
+    measure_values = measure_values.replace(
+        {
+            "NAN": "Sin registro",
+            "NONE": "Sin registro",
+            "SIN DATO": "Sin registro",
+            "SIN DATOS": "Sin registro",
+        }
+    )
+
     measures = (
-        data.loc[data["es_falta"].fillna(False), "medida_tomada"]
-        .fillna("Sin registro")
-        .astype(str)
-        .str.strip()
-        .replace("", "Sin registro")
+        measure_values
         .value_counts()
         .head(8)
         .rename_axis("medida")
@@ -283,20 +321,21 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
     )
 
     if measures.empty:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No hay medidas registradas para los filtros seleccionados",
+        figure = go.Figure()
+        figure.add_annotation(
+            text="No hay medidas registradas",
             x=0.5,
             y=0.5,
             xref="paper",
             yref="paper",
             showarrow=False,
         )
-        fig.update_xaxes(visible=False)
-        fig.update_yaxes(visible=False)
-        return _style(fig, "Medidas tomadas")
+        return _style(
+            figure,
+            "Medidas tomadas — versión 2",
+        )
 
-    fig = px.treemap(
+    figure = px.treemap(
         measures,
         path=["medida"],
         values="registros",
@@ -307,7 +346,8 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
             GREEN,
         ],
     )
-    fig.update_traces(
+
+    figure.update_traces(
         texttemplate=(
             "<b>%{label}</b><br>"
             "%{value} registros<br>"
@@ -319,21 +359,51 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
             "Porcentaje: %{percentRoot:.1%}"
             "<extra></extra>"
         ),
-        marker={"line": {"color": "white", "width": 2}},
+        marker={
+            "line": {
+                "color": "white",
+                "width": 2,
+            }
+        },
     )
-    fig.update_layout(
-        coloraxis_showscale=False,
-        margin={"l": 8, "r": 8, "t": 55, "b": 8},
-    )
-    return _style(fig, "Medidas tomadas")
 
+    figure.update_layout(
+        coloraxis_showscale=False,
+        margin={
+            "l": 8,
+            "r": 8,
+            "t": 55,
+            "b": 8,
+        },
+    )
+
+    return _style(
+        figure,
+        "Medidas tomadas — versión 2",
+    )
 
 def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     """Muestra embarcaciones con faltas en fechas distintas."""
     figure = go.Figure()
-    required_columns = {"embarcacion_anonima", "fecha", "es_falta", "supervision_id", "num_faltas"}
+    required_columns = {"fecha", "es_falta", "supervision_id", "num_faltas"}
 
-    if data.empty or not required_columns.issubset(data.columns):
+    # Prioriza el nombre real y conserva la columna anonimizada como respaldo.
+    vessel_columns = [
+        column
+        for column in (
+            "embarcacion",
+            "nombre_embarcacion",
+            "embarcacion_nombre",
+            "embarcacion_anonima",
+        )
+        if column in data.columns
+    ]
+
+    if (
+        data.empty
+        or not vessel_columns
+        or not required_columns.issubset(data.columns)
+    ):
         figure.add_annotation(text="No hay información de reincidencia disponible", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
         figure.update_layout(title="Embarcaciones con mayor reincidencia", height=520, xaxis={"visible": False}, yaxis={"visible": False})
         return figure
@@ -341,11 +411,27 @@ def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     faults = data[data["es_falta"].fillna(False)].copy()
     faults["fecha"] = pd.to_datetime(faults["fecha"], errors="coerce")
     faults["num_faltas"] = pd.to_numeric(faults["num_faltas"], errors="coerce").fillna(0)
-    faults["embarcacion_id"] = (
-        faults["embarcacion_anonima"].astype(str)
+
+    vessel_values = pd.Series("", index=faults.index, dtype="object")
+    for column in vessel_columns:
+        candidate = faults[column].fillna("").astype(str).str.strip()
+        vessel_values = vessel_values.mask(vessel_values.eq(""), candidate)
+
+    vessel_values = (
+        vessel_values
         .str.replace("\u00a0", " ", regex=False).str.strip().str.upper()
         .str.replace(r"\s+", " ", regex=True)
     )
+
+    # En estos registros, NO identifica embarcaciones no autorizadas.
+    unauthorized_mask = vessel_values.str.fullmatch(
+        r"(?:NO[.\-]?|NO AUTORIZAD[AO]S?|EMBARCACI[ÓO]N(?:ES)? NO AUTORIZAD[AO]S?)",
+        case=False,
+        na=False,
+    )
+    vessel_values.loc[unauthorized_mask] = "EMBARCACIONES NO AUTORIZADAS"
+    faults["embarcacion_id"] = vessel_values
+
     invalid_identifiers = {"", "NAN", "NONE", "N/A", "SIN DATO", "SIN DATOS", "SIN REGISTRO", "NO IDENTIFICADA", "NO IDENTIFICADO", "DESCONOCIDA", "DESCONOCIDO"}
     faults = faults[~faults["embarcacion_id"].isin(invalid_identifiers)].dropna(subset=["fecha"])
     faults["fecha_dia"] = faults["fecha"].dt.normalize()
