@@ -129,7 +129,7 @@ with st.sidebar:
     st.page_link("pages/1_Registros.py", label="Registros")
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calidad de datos y ETL",
+        label="Calidad de datos y Carga de datos",
     )
 
     st.divider()
