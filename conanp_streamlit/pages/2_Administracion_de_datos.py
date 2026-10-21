@@ -64,7 +64,7 @@ with st.sidebar:
 
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calidad de datos y ETL",
+        label="Calidad de datos y Cargada de datos",
         
     )
     st.page_link(
