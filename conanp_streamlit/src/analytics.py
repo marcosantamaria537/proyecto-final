@@ -1,6 +1,5 @@
 from __future__ import annotations
-import re
-###prueba de correcion
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -271,50 +270,12 @@ def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
 
 
 def build_measure_chart(data: pd.DataFrame) -> go.Figure:
-    """Separa y contabiliza individualmente las medidas tomadas."""
-
-    raw_measures = data.loc[
-        data["es_falta"].fillna(False),
-        "medida_tomada",
-    ].fillna("Sin registro")
-
-    separated_measures: list[str] = []
-
-    for raw_value in raw_measures:
-        clean_value = str(raw_value).replace("\u00a0", " ").strip()
-
-        parts = re.split(
-            r"\s*(?:,|;|\||/|\r?\n|\s+y\s+)\s*",
-            clean_value,
-            flags=re.IGNORECASE,
-        )
-
-        for part in parts:
-            normalized_part = re.sub(
-                r"\s+",
-                " ",
-                part,
-            ).strip()
-
-            if normalized_part:
-                separated_measures.append(normalized_part)
-
-    measure_values = pd.Series(
-        separated_measures,
-        dtype="object",
-    )
-
-    measure_values = measure_values.replace(
-        {
-            "NAN": "Sin registro",
-            "NONE": "Sin registro",
-            "SIN DATO": "Sin registro",
-            "SIN DATOS": "Sin registro",
-        }
-    )
-
     measures = (
-        measure_values
+        data.loc[data["es_falta"].fillna(False), "medida_tomada"]
+        .fillna("Sin registro")
+        .astype(str)
+        .str.strip()
+        .replace("", "Sin registro")
         .value_counts()
         .head(8)
         .rename_axis("medida")
@@ -322,21 +283,20 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
     )
 
     if measures.empty:
-        figure = go.Figure()
-        figure.add_annotation(
-            text="No hay medidas registradas",
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No hay medidas registradas para los filtros seleccionados",
             x=0.5,
             y=0.5,
             xref="paper",
             yref="paper",
             showarrow=False,
         )
-        return _style(
-            figure,
-            "Medidas tomadas — versión 2",
-        )
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return _style(fig, "Medidas tomadas")
 
-    figure = px.treemap(
+    fig = px.treemap(
         measures,
         path=["medida"],
         values="registros",
@@ -347,8 +307,7 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
             GREEN,
         ],
     )
-
-    figure.update_traces(
+    fig.update_traces(
         texttemplate=(
             "<b>%{label}</b><br>"
             "%{value} registros<br>"
@@ -360,28 +319,14 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
             "Porcentaje: %{percentRoot:.1%}"
             "<extra></extra>"
         ),
-        marker={
-            "line": {
-                "color": "white",
-                "width": 2,
-            }
-        },
+        marker={"line": {"color": "white", "width": 2}},
     )
-
-    figure.update_layout(
+    fig.update_layout(
         coloraxis_showscale=False,
-        margin={
-            "l": 8,
-            "r": 8,
-            "t": 55,
-            "b": 8,
-        },
+        margin={"l": 8, "r": 8, "t": 55, "b": 8},
     )
+    return _style(fig, "Medidas tomadas")
 
-    return _style(
-        figure,
-        "Medidas tomadas",
-    )
 
 def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     """Muestra embarcaciones con faltas en fechas distintas."""
