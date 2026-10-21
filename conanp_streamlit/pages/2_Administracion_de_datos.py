@@ -109,7 +109,52 @@ with quality_tab:
         f"{quality['poligonos_identificados_pct']:.1f}%",
     )
 
-    st.markdown("#### Campos con valores faltantes")
+st.markdown("#### Campos con valores faltantes")
+
+missing_fields = quality["faltantes"].copy()
+
+# Convertir la cantidad de faltantes a número.
+missing_fields["valores_faltantes"] = pd.to_numeric(
+    missing_fields["valores_faltantes"],
+    errors="coerce",
+).fillna(0)
+
+# Conservar únicamente campos con uno o más valores faltantes.
+missing_fields = missing_fields.loc[
+    missing_fields["valores_faltantes"] > 0,
+    ["campo", "porcentaje"],
+].copy()
+
+missing_fields["porcentaje"] = pd.to_numeric(
+    missing_fields["porcentaje"],
+    errors="coerce",
+).fillna(0)
+
+missing_fields = missing_fields.sort_values(
+    "porcentaje",
+    ascending=False,
+)
+
+if missing_fields.empty:
+    st.success(
+        "Todos los campos están completos; "
+        "no hay valores faltantes."
+    )
+else:
+    st.dataframe(
+        missing_fields,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "campo": st.column_config.TextColumn(
+                "Campo"
+            ),
+            "porcentaje": st.column_config.NumberColumn(
+                "Porcentaje",
+                format="%.1f%%",
+            ),
+        },
+    )
     st.dataframe(
         quality["faltantes"],
         use_container_width=True,
@@ -118,25 +163,47 @@ with quality_tab:
 
     st.markdown("#### Controles del modelo")
 
-    try:
-        controls = connection.query(
-            """
-            SELECT *
-            FROM dw.vw_control_calidad
-            ORDER BY control
-            """,
-            ttl=0,
+    st.markdown("#### Controles del modelo")
+
+try:
+    controls = connection.query(
+        """
+        SELECT *
+        FROM dw.vw_control_calidad
+        ORDER BY control
+        """,
+        ttl=0,
+    )
+
+    # Convertir la columna a valores numéricos.
+    controls["registros"] = pd.to_numeric(
+        controls["registros"],
+        errors="coerce",
+    ).fillna(0)
+
+    # Mostrar únicamente controles con problemas.
+    controls = controls.loc[
+        controls["registros"] > 0
+    ].copy()
+
+    if controls.empty:
+        st.success(
+            "Todos los controles del modelo están en cero."
         )
+    else:
         st.dataframe(
             controls,
             use_container_width=True,
             hide_index=True,
         )
-    except Exception as exc:
-        st.warning(
-            "No fue posible consultar dw.vw_control_calidad. "
-            f"Detalle: {exc}"
-        )
+
+except Exception as exc:
+    st.warning(
+        "No fue posible consultar "
+        "dw.vw_control_calidad. "
+        f"Detalle: {exc}"
+    )
+   
 
 with etl_tab:
     render_etl_tab(connection)
