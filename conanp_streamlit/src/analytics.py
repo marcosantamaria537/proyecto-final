@@ -208,15 +208,10 @@ def build_monthly_trend(
 
     figure = go.Figure()
     figure.add_trace(go.Scatter(
-
-
         x=summary["etiqueta"], y=summary["recorridos"],
         mode="lines+markers", name="Recorridos",
         line={"color": "#2878B5", "width": 3}, marker={"size": 8},
         hovertemplate=f"{x_axis_title}: %{{x}}<br>Recorridos: %{{y}}<extra></extra>",
-        
-        
-        
     ))
     figure.add_trace(go.Scatter(
 
@@ -224,8 +219,6 @@ def build_monthly_trend(
         mode="lines+markers", name="Supervisiones",
         line={"color": "#00866A", "width": 3}, marker={"size": 8},
         hovertemplate=f"{x_axis_title}: %{{x}}<br>Supervisiones: %{{y}}<extra></extra>",
-
-        
     ))
     figure.add_trace(go.Scatter(
         x=summary["etiqueta"], y=summary["incidencias"],
