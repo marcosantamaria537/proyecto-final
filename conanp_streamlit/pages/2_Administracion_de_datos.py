@@ -161,11 +161,7 @@ else:
             ),
         },
     )
-    st.dataframe(
-        quality["faltantes"],
-        use_container_width=True,
-        hide_index=True,
-    )
+    
 
     st.markdown("#### Controles del modelo")
 
