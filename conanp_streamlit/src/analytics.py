@@ -270,36 +270,70 @@ def build_day_hour_heatmap(data: pd.DataFrame) -> go.Figure:
 
 
 def build_measure_chart(data: pd.DataFrame) -> go.Figure:
-    measures = data.loc[data["es_falta"], "medida_tomada"].fillna("Sin registro").value_counts().head(6).rename_axis("medida").reset_index(name="registros")
-    fig = px.pie(measures, values="registros", names="medida", hole=0.62, color_discrete_sequence=[GREEN, TEAL, GOLD, "#5BAA93", "#9BC5B7", "#B6A05B"])
-    fig.update_traces(textposition="inside", textinfo="percent", hovertemplate="%{label}<br>%{value} (%{percent})<extra></extra>")
-    fig.update_layout(showlegend=True, legend={"orientation": "h", "y": -0.08})
+    measures = (
+        data.loc[data["es_falta"].fillna(False), "medida_tomada"]
+        .fillna("Sin registro")
+        .astype(str)
+        .str.strip()
+        .replace("", "Sin registro")
+        .value_counts()
+        .head(8)
+        .rename_axis("medida")
+        .reset_index(name="registros")
+    )
+
+    if measures.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No hay medidas registradas para los filtros seleccionados",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        return _style(fig, "Medidas tomadas")
+
+    fig = px.treemap(
+        measures,
+        path=["medida"],
+        values="registros",
+        color="registros",
+        color_continuous_scale=[
+            "#DCEDE7",
+            TEAL,
+            GREEN,
+        ],
+    )
+    fig.update_traces(
+        texttemplate=(
+            "<b>%{label}</b><br>"
+            "%{value} registros<br>"
+            "%{percentRoot:.1%}"
+        ),
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Registros: %{value}<br>"
+            "Porcentaje: %{percentRoot:.1%}"
+            "<extra></extra>"
+        ),
+        marker={"line": {"color": "white", "width": 2}},
+    )
+    fig.update_layout(
+        coloraxis_showscale=False,
+        margin={"l": 8, "r": 8, "t": 55, "b": 8},
+    )
     return _style(fig, "Medidas tomadas")
 
 
 def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     """Muestra embarcaciones con faltas en fechas distintas."""
     figure = go.Figure()
-    required_columns = {"fecha", "es_falta", "supervision_id", "num_faltas"}
+    required_columns = {"embarcacion_anonima", "fecha", "es_falta", "supervision_id", "num_faltas"}
 
-    # Se da prioridad al nombre real. La columna anonimizada queda como
-    # respaldo para archivos o consultas antiguas.
-    vessel_columns = [
-        column
-        for column in (
-            "embarcacion",
-            "nombre_embarcacion",
-            "embarcacion_nombre",
-            "embarcacion_anonima",
-        )
-        if column in data.columns
-    ]
-
-    if (
-        data.empty
-        or not vessel_columns
-        or not required_columns.issubset(data.columns)
-    ):
+    if data.empty or not required_columns.issubset(data.columns):
         figure.add_annotation(text="No hay información de reincidencia disponible", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
         figure.update_layout(title="Embarcaciones con mayor reincidencia", height=520, xaxis={"visible": False}, yaxis={"visible": False})
         return figure
@@ -307,31 +341,11 @@ def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
     faults = data[data["es_falta"].fillna(False)].copy()
     faults["fecha"] = pd.to_datetime(faults["fecha"], errors="coerce")
     faults["num_faltas"] = pd.to_numeric(faults["num_faltas"], errors="coerce").fillna(0)
-
-    # Construye una sola serie y rellena los valores vacíos con la siguiente
-    # columna disponible. Así se conserva el nombre real siempre que exista.
-    vessel_values = pd.Series("", index=faults.index, dtype="object")
-    for column in vessel_columns:
-        candidate = faults[column].fillna("").astype(str).str.strip()
-        vessel_values = vessel_values.mask(vessel_values.eq(""), candidate)
-
-    vessel_values = (
-        vessel_values
+    faults["embarcacion_id"] = (
+        faults["embarcacion_anonima"].astype(str)
         .str.replace("\u00a0", " ", regex=False).str.strip().str.upper()
         .str.replace(r"\s+", " ", regex=True)
     )
-
-    # En los datos, NO significa que la embarcación no está autorizada.
-    # Se usa fullmatch para no modificar nombres que únicamente contengan
-    # esas letras dentro de otra palabra.
-    unauthorized_mask = vessel_values.str.fullmatch(
-        r"(?:NO[.\-]?|NO AUTORIZAD[AO]S?|EMBARCACI[ÓO]N(?:ES)? NO AUTORIZAD[AO]S?)",
-        case=False,
-        na=False,
-    )
-    vessel_values.loc[unauthorized_mask] = "EMBARCACIONES NO AUTORIZADAS"
-    faults["embarcacion_id"] = vessel_values
-
     invalid_identifiers = {"", "NAN", "NONE", "N/A", "SIN DATO", "SIN DATOS", "SIN REGISTRO", "NO IDENTIFICADA", "NO IDENTIFICADO", "DESCONOCIDA", "DESCONOCIDO"}
     faults = faults[~faults["embarcacion_id"].isin(invalid_identifiers)].dropna(subset=["fecha"])
     faults["fecha_dia"] = faults["fecha"].dt.normalize()
@@ -345,17 +359,6 @@ def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
         )
     )
     recurrence = recurrence[recurrence["fechas_con_falta"] >= 2]
-
-    # Protección adicional para datos previamente agrupados o almacenados
-    # con la etiqueta corta.
-    recurrence.loc[
-        recurrence["embarcacion_id"].str.fullmatch(
-            r"NO[.\-]?",
-            case=False,
-            na=False,
-        ),
-        "embarcacion_id",
-    ] = "EMBARCACIONES NO AUTORIZADAS"
 
     if recurrence.empty:
         figure.add_annotation(text="No se encontraron embarcaciones reincidentes en el periodo seleccionado", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
