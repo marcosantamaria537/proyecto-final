@@ -163,8 +163,6 @@ else:
 
     st.markdown("#### Controles del modelo")
 
-    st.markdown("#### Controles del modelo")
-
 try:
     controls = connection.query(
         """
