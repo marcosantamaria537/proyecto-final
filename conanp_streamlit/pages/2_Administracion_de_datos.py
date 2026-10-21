@@ -60,7 +60,7 @@ with st.sidebar:
     )
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calida de datos y Carga de datos",
+        label="Calidad de datos y Carga de datos",
        
     )
     st.page_link(
