@@ -125,12 +125,11 @@ except DatabaseLoadError as exc:
 
 with st.sidebar:
     st.markdown("### Navegación")
-    st.page_link("app.py", label="Tablero principal", icon="🏠")
-    st.page_link("pages/1_Registros.py", label="Registros", icon="📋")
+    st.page_link("app.py", label="Tablero principal")
+    st.page_link("pages/1_Registros.py", label="Registros")
     st.page_link(
         "pages/2_Administracion_de_datos.py",
         label="Calidad de datos y ETL",
-        icon="🗃️",
     )
 
     st.divider()
