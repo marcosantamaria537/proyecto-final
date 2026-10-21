@@ -136,6 +136,7 @@ with st.sidebar:
     st.markdown("### Fuente de información")
     st.success("PostgreSQL conectado")
     st.caption("Base: registro_recorridos · Esquema: dw")
+    st.caption("filtros generales")
 
     all_dates = pd.concat(
         [supervisions["fecha"], recorridos["fecha"]],
