@@ -73,6 +73,7 @@ with st.sidebar:
     st.caption(
         "Módulo de administración, "
         "calidad y carga de datos."
+        "Registro"
     )
 
 st.title("Administración de datos")
