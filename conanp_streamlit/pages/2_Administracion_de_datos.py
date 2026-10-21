@@ -95,6 +95,7 @@ quality_tab, etl_tab = st.tabs(
     [
         "Calidad de datos",
         "Carga ETL",
+        "Registos"
     ]
 )
 
