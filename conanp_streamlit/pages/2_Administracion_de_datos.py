@@ -12,7 +12,7 @@ from src.postgres_data import DatabaseLoadError, load_postgres_data
 ROOT = Path(__file__).resolve().parents[1]
 
 st.set_page_config(
-    page_title="Administración de datos | CONANP",
+    page_title="Administración | CONANP",
     layout="wide",
     initial_sidebar_state="expanded",
 )
