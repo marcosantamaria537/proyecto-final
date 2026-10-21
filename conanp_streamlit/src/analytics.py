@@ -401,8 +401,23 @@ def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
         .str.replace("\u00a0", " ", regex=False).str.strip().str.upper()
         .str.replace(r"\s+", " ", regex=True)
     )
-    invalid_identifiers = {"", "NAN", "NONE", "N/A", "SIN DATO", "SIN DATOS", "SIN REGISTRO", "NO IDENTIFICADA", "NO IDENTIFICADO", "DESCONOCIDA", "DESCONOCIDO"}
-    faults = faults[~faults["embarcacion_id"].isin(invalid_identifiers)].dropna(subset=["fecha"])
+invalid_identifiers = {
+    "",
+    "NAN",
+    "NONE",
+    "N/A",
+    "NO APLICA",
+    "NO APLICA.",
+    "SIN DATO",
+    "SIN DATOS",
+    "SIN REGISTRO",
+    "SIN EMBARCACION",
+    "SIN EMBARCACIÓN",
+    "NO IDENTIFICADA",
+    "NO IDENTIFICADO",
+    "DESCONOCIDA",
+    "DESCONOCIDO",
+}    faults = faults[~faults["embarcacion_id"].isin(invalid_identifiers)].dropna(subset=["fecha"])
     faults["fecha_dia"] = faults["fecha"].dt.normalize()
     recurrence = (
         faults.groupby("embarcacion_id", as_index=False)
