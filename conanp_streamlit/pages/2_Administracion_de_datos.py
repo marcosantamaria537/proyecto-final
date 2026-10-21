@@ -12,7 +12,8 @@ from src.postgres_data import DatabaseLoadError, load_postgres_data
 ROOT = Path(__file__).resolve().parents[1]
 
 st.set_page_config(
-    page_title="Administración | CONANP",
+    page_title="Administración de datos | CONANP",
+    page_icon="🗃️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -51,23 +52,28 @@ def require_optional_password() -> None:
 apply_styles()
 require_optional_password()
 
-# La navegación se crea solamente después de validar la contraseña.
+# Panel lateral propio de esta página.
 with st.sidebar:
+    st.markdown("### Navegación")
+
     st.page_link(
         "app.py",
         label="Tablero principal",
-       
+        icon="🏠",
     )
+
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calidad de datos y Carga de datos",
-       
+        label="Calidad de datos y ETL",
+        icon="🗃️",
     )
-    st.page_link(
-            "pages/1_Registros.py",
-            label="registros"
-        )
+
     st.divider()
+
+    st.caption(
+        "Módulo de administración, "
+        "calidad y carga de datos."
+    )
 
 st.title("Administración de datos")
 st.caption(
@@ -88,7 +94,7 @@ except DatabaseLoadError as exc:
 quality_tab, etl_tab = st.tabs(
     [
         "Calidad de datos",
-        "Carga de datos",
+        "Carga ETL",
     ]
 )
 
@@ -104,23 +110,10 @@ with quality_tab:
     )
 
     st.markdown("#### Campos con valores faltantes")
-
-    missing_fields = quality["faltantes"].loc[
-        :,
-        ["campo", "porcentaje"],
-    ].copy()
-
     st.dataframe(
-        missing_fields,
+        quality["faltantes"],
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "campo": st.column_config.TextColumn("Campo"),
-            "porcentaje": st.column_config.NumberColumn(
-                "Porcentaje",
-                format="%.1f%%",
-            ),
-        },
     )
 
     st.markdown("#### Controles del modelo")
