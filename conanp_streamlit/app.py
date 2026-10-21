@@ -486,15 +486,10 @@ if (
     st.stop()
 
 
-(
-    overview_tab,
-    spatial_tab,
-    records_tab,
-) = st.tabs(
+overview_tab, spatial_tab = st.tabs(
     [
         "Resumen",
         "Análisis espacial",
-        "Registros",
     ]
 )
 
