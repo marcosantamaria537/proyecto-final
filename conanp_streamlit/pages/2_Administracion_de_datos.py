@@ -63,6 +63,10 @@ with st.sidebar:
         label="Administración de datos",
        
     )
+    st.page_link(
+            "pages/1_Registros.py",
+            label="registros"
+        )
     st.divider()
 
 st.title("Administración de datos")
