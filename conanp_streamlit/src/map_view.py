@@ -20,7 +20,7 @@ POLYGON_NAMES = {
 
 # Transparencia del cuadro de información del mapa.
 # 0.0 = invisible; 1.0 = completamente sólido.
-TOOLTIP_OPACITY = 0.10
+TOOLTIP_OPACITY = 0.5
 
 
 def _polygon_key(value: object) -> str:
