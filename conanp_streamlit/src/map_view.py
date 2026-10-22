@@ -185,6 +185,40 @@ def _fit_geojson_bounds(map_object: folium.Map, geojson: dict) -> None:
         ]
     )
 
+    # Streamlit crea el mapa cuando la pestaña todavia puede estar oculta.
+    # En ese momento Leaflet calcula un tamano incorrecto y muestra el mundo
+    # completo. Recalcular el tamano varias veces permite que el mapa se
+    # encuadre correctamente en cuanto la pestana se vuelve visible.
+    map_name = map_object.get_name()
+    bounds = [
+        [min(latitudes), min(longitudes)],
+        [max(latitudes), max(longitudes)],
+    ]
+    map_object.get_root().script.add_child(
+        folium.Element(
+            f"""
+            (function () {{
+                const map = {map_name};
+                const bounds = {bounds!r};
+                let attempts = 0;
+
+                function refreshMap() {{
+                    map.invalidateSize({{pan: false}});
+                    map.fitBounds(bounds, {{padding: [20, 20]}});
+                    attempts += 1;
+
+                    if (attempts < 20) {{
+                        window.setTimeout(refreshMap, 250);
+                    }}
+                }}
+
+                window.setTimeout(refreshMap, 100);
+                window.addEventListener("resize", refreshMap);
+            }})();
+            """
+        )
+    )
+
 
 def render_surveillance_map(
     data: pd.DataFrame,
@@ -202,11 +236,14 @@ def render_surveillance_map(
             float(coordinates["longitud"].median()),
         ]
     else:
-        center = [21.135, -86.76]
+        center = [21.127, -86.763]
 
     map_object = folium.Map(
-        location=center,
-        zoom_start=10,
+        # Vista inicial fija para mostrar Isla Mujeres, Punta Cancun
+        # y Punta Nizuc desde la primera apertura de la pestana.
+        location=[21.127, -86.763],
+        zoom_start=10.2,
+        zoom_snap=0.1,
         tiles=None,
         control_scale=True,
     )
@@ -314,7 +351,9 @@ def render_surveillance_map(
             ),
         ).add_to(map_object)
 
-        _fit_geojson_bounds(map_object, prepared)
+        # No ejecutar _fit_geojson_bounds aqui. Cuando el mapa se crea dentro
+        # de una pestana oculta, Leaflet calcula un zoom mundial. La vista fija
+        # definida arriba mantiene visibles los tres poligonos desde el inicio.
 
         # Personaliza el cuadro que aparece al pasar el cursor sobre un
         # polígono. El uso de rgba permite mostrar el mapa detrás del texto.
