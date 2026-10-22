@@ -99,7 +99,7 @@ except DatabaseLoadError as exc:
 quality_tab, etl_tab = st.tabs(
     [
         "Calidad de datos",
-        "Carga ETL",
+        "Carga de datos",
         
     ]
 )
