@@ -461,12 +461,12 @@ def build_recurrence_chart(data: pd.DataFrame) -> go.Figure:
         x=recurrence["fechas_con_falta"], y=recurrence["embarcacion_id"],
         orientation="h", marker_color=colors, text=recurrence["fechas_con_falta"],
         textposition="outside", customdata=custom_data,
-        hovertemplate=("<b>%{y}</b><br>Fechas distintas con falta: %{x}<br>Supervisiones con falta: %{customdata[0]}<br>Incidencias registradas: %{customdata[1]}<br>Última fecha: %{customdata[2]}<br>Clasificación: %{customdata[3]}<extra></extra>"),
+        hovertemplate=("<b>%{y}</b><br>cantidad de faltas por embarcacion: %{x}<br>Supervisiones con falta: %{customdata[0]}<br>Incidencias registradas: %{customdata[1]}<br>Última fecha: %{customdata[2]}<br>Clasificación: %{customdata[3]}<extra></extra>"),
     ))
     figure.update_layout(
         title={"text": "Embarcaciones con mayor reincidencia", "x": 0.02, "xanchor": "left"},
         height=520,
-        xaxis={"title": "Fechas distintas con falta", "rangemode": "tozero", "tickmode": "auto", "nticks": 8, "tickformat": "d", "automargin": True},
+        xaxis={"title": "Cantidad de faltas por embarcacion", "rangemode": "tozero", "tickmode": "auto", "nticks": 8, "tickformat": "d", "automargin": True},
         yaxis={"title": "", "automargin": True},
         showlegend=False,
         margin={"l": 125, "r": 35, "t": 70, "b": 70},
