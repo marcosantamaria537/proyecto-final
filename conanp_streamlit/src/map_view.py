@@ -223,6 +223,7 @@ def _fit_geojson_bounds(map_object: folium.Map, geojson: dict) -> None:
 def render_surveillance_map(
     data: pd.DataFrame,
     geojson: dict | None,
+    recorridos: pd.DataFrame | None = None,
 ) -> None:
     """Muestra los polígonos coloreados según sus faltas registradas."""
 
@@ -531,3 +532,185 @@ def render_surveillance_map(
         comparison_figure,
         use_container_width=True,
     )
+
+    # ==============================================================
+    # INDICADORES RELATIVOS
+    # Se colocan debajo del resumen existente sin modificar el mapa.
+    # ==============================================================
+    indicator_data = counts.copy()
+    indicator_data["incidencias_por_supervision"] = (
+        indicator_data["faltas"]
+        .div(indicator_data["supervisiones"].replace(0, pd.NA))
+        .fillna(0)
+    )
+
+    # Preparar el número de recorridos únicos de cada polígono. Se utiliza
+    # el tercer argumento cuando app.py lo proporciona. Como respaldo, se
+    # admite recorrido_id dentro del DataFrame de supervisiones.
+    route_source: pd.DataFrame | None = recorridos
+    if route_source is None and "recorrido_id" in table_data.columns:
+        route_source = table_data
+
+    if (
+        route_source is not None
+        and not route_source.empty
+        and "poligono" in route_source.columns
+    ):
+        route_data = route_source.copy()
+        route_data["poligono_clave"] = (
+            route_data["poligono"]
+            .fillna("")
+            .map(_polygon_key)
+        )
+        route_data = route_data[
+            route_data["poligono_clave"].isin(POLYGON_NAMES)
+        ].copy()
+
+        if "recorrido_id" in route_data.columns:
+            route_counts = (
+                route_data.groupby("poligono_clave", as_index=False)
+                .agg(recorridos=("recorrido_id", "nunique"))
+            )
+        else:
+            route_counts = (
+                route_data.groupby("poligono_clave", as_index=False)
+                .size()
+                .rename(columns={"size": "recorridos"})
+            )
+
+        indicator_data = indicator_data.merge(
+            route_counts,
+            on="poligono_clave",
+            how="left",
+        )
+        indicator_data["recorridos"] = (
+            indicator_data["recorridos"].fillna(0).astype(int)
+        )
+        indicator_data["supervisiones_por_recorrido"] = (
+            indicator_data["supervisiones"]
+            .div(indicator_data["recorridos"].replace(0, pd.NA))
+            .fillna(0)
+        )
+    else:
+        indicator_data["recorridos"] = 0
+        indicator_data["supervisiones_por_recorrido"] = 0.0
+
+    # Mantener el mismo orden visual en las dos gráficas.
+    indicator_data = indicator_data.sort_values(
+        "incidencias_por_supervision",
+        ascending=True,
+    )
+
+    incidence_figure = go.Figure(
+        go.Bar(
+            y=indicator_data["poligono"],
+            x=indicator_data["incidencias_por_supervision"],
+            orientation="h",
+            marker_color="#D9A321",
+            text=indicator_data["incidencias_por_supervision"].map(
+                lambda value: f"{value:.2f}"
+            ),
+            textposition="outside",
+            cliponaxis=False,
+            customdata=indicator_data[["faltas", "supervisiones"]],
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Incidencias por supervisión: %{x:.2f}<br>"
+                "Faltas: %{customdata[0]:,}<br>"
+                "Supervisiones: %{customdata[1]:,}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    incidence_figure.update_layout(
+        title={
+            "text": "Promedio de incidencias por supervisión",
+            "x": 0,
+            "xanchor": "left",
+        },
+        height=390,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={
+            "family": "Inter, system-ui, sans-serif",
+            "color": "#16352D",
+        },
+        showlegend=False,
+        margin={"l": 20, "r": 55, "t": 75, "b": 45},
+        xaxis={
+            "title": "Incidencias por supervisión",
+            "rangemode": "tozero",
+            "tickformat": ".2f",
+            "gridcolor": "#E1EBE7",
+            "zeroline": False,
+        },
+        yaxis={"title": "", "automargin": True},
+    )
+
+    route_figure = go.Figure(
+        go.Bar(
+            y=indicator_data["poligono"],
+            x=indicator_data["supervisiones_por_recorrido"],
+            orientation="h",
+            marker_color="#00866A",
+            text=indicator_data["supervisiones_por_recorrido"].map(
+                lambda value: f"{value:.2f}"
+            ),
+            textposition="outside",
+            cliponaxis=False,
+            customdata=indicator_data[["supervisiones", "recorridos"]],
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Supervisiones por recorrido: %{x:.2f}<br>"
+                "Supervisiones: %{customdata[0]:,}<br>"
+                "Recorridos: %{customdata[1]:,}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    route_figure.update_layout(
+        title={
+            "text": "Promedio de supervisiones por recorrido",
+            "x": 0,
+            "xanchor": "left",
+        },
+        height=390,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={
+            "family": "Inter, system-ui, sans-serif",
+            "color": "#16352D",
+        },
+        showlegend=False,
+        margin={"l": 20, "r": 55, "t": 75, "b": 45},
+        xaxis={
+            "title": "Supervisiones por recorrido",
+            "rangemode": "tozero",
+            "tickformat": ".2f",
+            "gridcolor": "#E1EBE7",
+            "zeroline": False,
+        },
+        yaxis={"title": "", "automargin": True},
+    )
+
+    incidence_column, route_column = st.columns(
+        [1, 1],
+        gap="large",
+    )
+    with incidence_column:
+        st.plotly_chart(
+            incidence_figure,
+            use_container_width=True,
+        )
+
+    with route_column:
+        if route_source is None:
+            st.info(
+                "Proporciona filtered_recorridos para calcular "
+                "las supervisiones por recorrido."
+            )
+        else:
+            st.plotly_chart(
+                route_figure,
+                use_container_width=True,
+            )
