@@ -445,7 +445,16 @@ def render_surveillance_map(
 
     counts["poligono"] = counts["poligono_clave"].map(POLYGON_NAMES)
     counts["faltas"] = counts["faltas"].round().astype(int)
-    counts = counts[["poligono", "supervisiones", "faltas"]]
+    # Conservar poligono_clave porque las gráficas de indicadores la usan
+    # para relacionar las supervisiones con los recorridos.
+    counts = counts[
+        [
+            "poligono_clave",
+            "poligono",
+            "supervisiones",
+            "faltas",
+        ]
+    ]
 
     counts = counts.sort_values(
         "faltas",
