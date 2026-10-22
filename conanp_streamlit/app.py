@@ -495,7 +495,6 @@ if (
     [
         "Resumen",
         "Análisis espacial",
-        "Registros",
     ]
 )
 
