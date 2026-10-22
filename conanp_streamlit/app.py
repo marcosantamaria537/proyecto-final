@@ -490,7 +490,6 @@ if (
 (
     overview_tab,
     spatial_tab,
-    records_tab,
 ) = st.tabs(
     [
         "Resumen",
