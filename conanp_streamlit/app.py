@@ -208,6 +208,11 @@ with st.sidebar:
         label="Calidad de datos y Carga de datos",
        
     )
+    st.page_link(
+            "pages/1_Registros.py",
+            label="Registros",
+           
+        )
 
     st.divider()
 
