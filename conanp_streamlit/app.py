@@ -544,10 +544,10 @@ with overview_tab:
 
 with spatial_tab:
     render_surveillance_map(
-        filtered_supervisions,
-        polygons_geojson,
-        filtered_recorridos,
-    )
+    filtered_supervisions,
+    polygons_geojson,
+    filtered_recorridos,
+)
 
 
 
