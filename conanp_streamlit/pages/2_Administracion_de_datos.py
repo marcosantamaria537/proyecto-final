@@ -1,7 +1,8 @@
 from __future__ import annotations
-import pandas as pd
+
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from src.data import quality_summary
@@ -58,30 +59,25 @@ with st.sidebar:
     st.page_link(
         "app.py",
         label="Tablero principal",
-        
     )
-
     st.page_link(
         "pages/2_Administracion_de_datos.py",
         label="Calidad de datos y carga de datos",
-        
     )
     st.page_link(
         "pages/1_Registros.py",
         label="Registros",
-        
     )
     st.divider()
 
     st.caption(
-        "Módulo de administración, "
-        "calidad y carga de datos."
-        "Registro"
+        "Módulo de administración, calidad y carga de datos."
     )
 
 st.title("Administración de datos")
 st.caption(
-    "Consulta la calidad de la información y carga nuevos archivos mediante el ETL."
+    "Consulta la calidad de la información y carga nuevos archivos "
+    "mediante el ETL."
 )
 
 try:
@@ -99,112 +95,114 @@ quality_tab, etl_tab = st.tabs(
     [
         "Calidad de datos",
         "Carga de datos",
-        
     ]
 )
+
 
 with quality_tab:
     quality = quality_summary(supervisions)
 
     q1, q2, q3 = st.columns(3)
-    q1.metric("Supervisiones cargadas", f"{quality['registros']:,}")
-    q2.metric("Fechas válidas", f"{quality['fechas_validas_pct']:.1f}%")
+    q1.metric(
+        "Supervisiones cargadas",
+        f"{quality['registros']:,}",
+    )
+    q2.metric(
+        "Fechas válidas",
+        f"{quality['fechas_validas_pct']:.1f}%",
+    )
     q3.metric(
         "Polígonos identificados",
         f"{quality['poligonos_identificados_pct']:.1f}%",
     )
 
-st.markdown("#### Campos con valores faltantes")
+    st.markdown("#### Campos con valores faltantes")
 
-missing_fields = quality["faltantes"].copy()
+    missing_fields = quality["faltantes"].copy()
 
-# Convertir la cantidad de faltantes a número.
-missing_fields["valores_faltantes"] = pd.to_numeric(
-    missing_fields["valores_faltantes"],
-    errors="coerce",
-).fillna(0)
-
-# Conservar únicamente campos con uno o más valores faltantes.
-missing_fields = missing_fields.loc[
-    missing_fields["valores_faltantes"] > 0,
-    ["campo", "porcentaje"],
-].copy()
-
-missing_fields["porcentaje"] = pd.to_numeric(
-    missing_fields["porcentaje"],
-    errors="coerce",
-).fillna(0)
-
-missing_fields = missing_fields.sort_values(
-    "porcentaje",
-    ascending=False,
-)
-
-if missing_fields.empty:
-    st.success(
-        "Todos los campos están completos; "
-        "no hay valores faltantes."
-    )
-else:
-    st.dataframe(
-        missing_fields,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "campo": st.column_config.TextColumn(
-                "Campo"
-            ),
-            "porcentaje": st.column_config.NumberColumn(
-                "Porcentaje",
-                format="%.1f%%",
-            ),
-        },
-    )
-    
-
-    st.markdown("#### Controles del modelo")
-
-try:
-    controls = connection.query(
-        """
-        SELECT *
-        FROM dw.vw_control_calidad
-        ORDER BY control
-        """,
-        ttl=0,
-    )
-
-    # Convertir la columna a valores numéricos.
-    controls["registros"] = pd.to_numeric(
-        controls["registros"],
+    # Convertir la cantidad de faltantes a número.
+    missing_fields["valores_faltantes"] = pd.to_numeric(
+        missing_fields["valores_faltantes"],
         errors="coerce",
     ).fillna(0)
 
-    # Mostrar únicamente controles con problemas.
-    controls = controls.loc[
-        controls["registros"] > 0
+    # Conservar únicamente campos con uno o más valores faltantes.
+    missing_fields = missing_fields.loc[
+        missing_fields["valores_faltantes"] > 0,
+        ["campo", "porcentaje"],
     ].copy()
 
-    if controls.empty:
+    missing_fields["porcentaje"] = pd.to_numeric(
+        missing_fields["porcentaje"],
+        errors="coerce",
+    ).fillna(0)
+
+    missing_fields = missing_fields.sort_values(
+        "porcentaje",
+        ascending=False,
+    )
+
+    if missing_fields.empty:
         st.success(
-            "Todos los controles del modelo están en cero."
+            "Todos los campos están completos; "
+            "no hay valores faltantes."
         )
     else:
         st.dataframe(
-            controls,
+            missing_fields,
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "campo": st.column_config.TextColumn("Campo"),
+                "porcentaje": st.column_config.NumberColumn(
+                    "Porcentaje",
+                    format="%.1f%%",
+                ),
+            },
         )
 
-except Exception as exc:
-    st.warning(
-        "No fue posible consultar "
-        "dw.vw_control_calidad. "
-        f"Detalle: {exc}"
-    )
-   
+    st.markdown("#### Controles del modelo")
+
+    try:
+        controls = connection.query(
+            """
+            SELECT *
+            FROM dw.vw_control_calidad
+            ORDER BY control
+            """,
+            ttl=0,
+        )
+
+        controls["registros"] = pd.to_numeric(
+            controls["registros"],
+            errors="coerce",
+        ).fillna(0)
+
+        # Mostrar únicamente controles que tengan registros problemáticos.
+        controls = controls.loc[
+            controls["registros"] > 0
+        ].copy()
+
+        if controls.empty:
+            st.success(
+                "Todos los controles del modelo están en cero."
+            )
+        else:
+            st.dataframe(
+                controls,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    except Exception as exc:
+        st.warning(
+            "No fue posible consultar dw.vw_control_calidad. "
+            f"Detalle: {exc}"
+        )
+
 
 with etl_tab:
     render_etl_tab(connection)
+
 
 st.caption("Módulo de administración y control de datos de CONANP.")
