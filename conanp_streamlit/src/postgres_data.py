@@ -13,19 +13,41 @@ class DatabaseLoadError(RuntimeError):
 
 SUPERVISION_QUERY = """
 SELECT
-    fs.supervision_id, fs.fuente, d.fecha, fs.hora_inicio AS hora,
-    u.poligono, u.subzona, u.subpoligono,
-    a.actividad_terrestre, a.actividad_realizada, a.es_terrestre,
-    fs.vehiculo, fs.embarcacion, fs.num_pax, fs.num_tripulacion,
-    fs.num_faltas, fs.hubo_falta AS es_falta, vista.tipos_falta,
-    COALESCE(raw.medida_tomada::TEXT, 'Sin registro') AS medida_tomada
+    fs.supervision_id,
+    fs.fuente,
+    d.fecha,
+    fs.hora_inicio AS hora,
+    u.poligono,
+    u.subzona,
+    u.subpoligono,
+    a.actividad_terrestre,
+    a.actividad_realizada,
+    a.es_terrestre,
+    fs.vehiculo,
+    fs.embarcacion,
+    raw.embarcacion_autorizada,
+    raw.embarcacion_no_autorizada,
+    fs.num_pax,
+    fs.num_tripulacion,
+    fs.num_faltas,
+    fs.hubo_falta AS es_falta,
+    vista.tipos_falta,
+    COALESCE(
+        raw.medida_tomada::TEXT,
+        'Sin registro'
+    ) AS medida_tomada
 FROM dw.fact_supervision fs
-JOIN dw.dim_fecha d ON d.fecha_id = fs.fecha_id
-JOIN dw.dim_ubicacion u ON u.ubicacion_id = fs.ubicacion_id
-JOIN dw.dim_actividad a ON a.actividad_id = fs.actividad_id
-JOIN dw.vw_supervisiones vista ON vista.supervision_id = fs.supervision_id
+JOIN dw.dim_fecha d
+    ON d.fecha_id = fs.fecha_id
+JOIN dw.dim_ubicacion u
+    ON u.ubicacion_id = fs.ubicacion_id
+JOIN dw.dim_actividad a
+    ON a.actividad_id = fs.actividad_id
+JOIN dw.vw_supervisiones vista
+    ON vista.supervision_id = fs.supervision_id
 LEFT JOIN staging.faltas_raw raw
-    ON fs.fuente = 'FALTAS' AND raw._fila_origen = fs.fila_origen
+    ON fs.fuente = 'FALTAS'
+    AND raw._fila_origen = fs.fila_origen
 ORDER BY d.fecha, fs.supervision_id
 """
 
