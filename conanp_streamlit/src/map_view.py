@@ -731,6 +731,8 @@ def render_surveillance_map(
     vessel_columns = [
         column
         for column in (
+            "embarcacion_autorizada",
+            "embarcacion_no_autorizada",
             "embarcacion",
             "nombre_embarcacion",
             "embarcacion_nombre",
@@ -758,39 +760,6 @@ def render_surveillance_map(
 
         vessel_data = vessel_data.loc[fault_mask].copy()
 
-        # Tomar el primer nombre disponible sin reemplazar nombres reales.
-        vessel_names = pd.Series(
-            "",
-            index=vessel_data.index,
-            dtype="object",
-        )
-        for column in vessel_columns:
-            candidate = (
-                vessel_data[column]
-                .fillna("")
-                .astype(str)
-                .str.replace("\u00a0", " ", regex=False)
-                .str.strip()
-            )
-            vessel_names = vessel_names.mask(
-                vessel_names.eq(""),
-                candidate,
-            )
-
-        vessel_names = (
-            vessel_names
-            .str.replace(r"\s+", " ", regex=True)
-            .str.upper()
-        )
-        vessel_data["embarcacion_nombre"] = vessel_names
-
-        unauthorized_mask = vessel_names.str.fullmatch(
-            r"(?:NO[.\-]?|NO AUTORIZAD[AO]S?|"
-            r"EMBARCACI[ÓO]N(?:ES)? NO AUTORIZAD[AO]S?)",
-            case=False,
-            na=False,
-        )
-
         invalid_names = {
             "",
             "NAN",
@@ -798,6 +767,8 @@ def render_surveillance_map(
             "N/A",
             "NO APLICA",
             "NO APLICA.",
+            "NO",
+            "NO.",
             "SIN DATO",
             "SIN DATOS",
             "SIN REGISTRO",
@@ -809,20 +780,59 @@ def render_surveillance_map(
             "DESCONOCIDO",
         }
 
+        def clean_vessel_names(column: str) -> pd.Series:
+            """Limpia una columna sin anonimizar los nombres."""
+
+            if column not in vessel_data.columns:
+                return pd.Series(
+                    "",
+                    index=vessel_data.index,
+                    dtype="object",
+                )
+
+            return (
+                vessel_data[column]
+                .fillna("")
+                .astype(str)
+                .str.replace("\u00a0", " ", regex=False)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+                .str.upper()
+            )
+
+        # Usar directamente las dos columnas que el ETL obtiene del Excel.
+        authorized_names = clean_vessel_names(
+            "embarcacion_autorizada"
+        )
+        unauthorized_names = clean_vessel_names(
+            "embarcacion_no_autorizada"
+        )
+
+        # Respaldo para datos antiguos que solo contienen `embarcacion`.
+        if "embarcacion_autorizada" not in vessel_data.columns:
+            authorized_names = clean_vessel_names("embarcacion")
+
+        vessel_data["embarcacion_autorizada_nombre"] = authorized_names
+        vessel_data["embarcacion_no_autorizada_nombre"] = (
+            unauthorized_names
+        )
+
         # Embarcaciones autorizadas: se muestran individualmente por nombre.
         authorized_data = vessel_data.loc[
-            ~unauthorized_mask
-            & ~vessel_names.isin(invalid_names)
+            ~authorized_names.isin(invalid_names)
         ].copy()
 
         if authorized_data.empty:
             authorized_summary = pd.DataFrame(
-                columns=["embarcacion_nombre", "incidencias"]
+                columns=[
+                    "embarcacion_autorizada_nombre",
+                    "incidencias",
+                ]
             )
         else:
             authorized_summary = (
                 authorized_data.groupby(
-                    "embarcacion_nombre",
+                    "embarcacion_autorizada_nombre",
                     as_index=False,
                 )
                 .agg(incidencias=("num_faltas", "sum"))
@@ -849,7 +859,9 @@ def render_surveillance_map(
         else:
             authorized_figure.add_trace(
                 go.Bar(
-                    y=authorized_summary["embarcacion_nombre"],
+                    y=authorized_summary[
+                        "embarcacion_autorizada_nombre"
+                    ],
                     x=authorized_summary["incidencias"],
                     orientation="h",
                     marker_color="#00866A",
@@ -891,39 +903,29 @@ def render_surveillance_map(
             yaxis={"title": "", "automargin": True},
         )
 
-        # Las embarcaciones no autorizadas no tienen nombre individual en la
-        # fuente; por eso sus incidencias se presentan agrupadas por polígono.
+        # Las embarcaciones no autorizadas se obtienen directamente de la
+        # columna NOMBRE DE LA EMBARCACIÓN INFRACTOR (NO AUTORIZADA).
         unauthorized_data = vessel_data.loc[
-            unauthorized_mask
-        ].copy()
-        unauthorized_data["poligono_clave"] = (
-            unauthorized_data["poligono"]
-            .fillna("")
-            .map(_polygon_key)
-        )
-        unauthorized_data = unauthorized_data[
-            unauthorized_data["poligono_clave"].isin(POLYGON_NAMES)
+            ~unauthorized_names.isin(invalid_names)
         ].copy()
 
         if unauthorized_data.empty:
             unauthorized_summary = pd.DataFrame(
-                columns=["poligono", "incidencias"]
+                columns=[
+                    "embarcacion_no_autorizada_nombre",
+                    "incidencias",
+                ]
             )
         else:
             unauthorized_summary = (
                 unauthorized_data.groupby(
-                    "poligono_clave",
+                    "embarcacion_no_autorizada_nombre",
                     as_index=False,
                 )
                 .agg(incidencias=("num_faltas", "sum"))
-            )
-            unauthorized_summary["poligono"] = (
-                unauthorized_summary["poligono_clave"]
-                .map(POLYGON_NAMES)
-            )
-            unauthorized_summary = unauthorized_summary.sort_values(
-                "incidencias",
-                ascending=True,
+                .sort_values("incidencias", ascending=False)
+                .head(10)
+                .sort_values("incidencias", ascending=True)
             )
 
         unauthorized_figure = go.Figure()
@@ -944,7 +946,9 @@ def render_surveillance_map(
         else:
             unauthorized_figure.add_trace(
                 go.Bar(
-                    y=unauthorized_summary["poligono"],
+                    y=unauthorized_summary[
+                        "embarcacion_no_autorizada_nombre"
+                    ],
                     x=unauthorized_summary["incidencias"],
                     orientation="h",
                     marker_color="#C44E52",
