@@ -723,3 +723,287 @@ def render_surveillance_map(
                 route_figure,
                 use_container_width=True,
             )
+
+    # ==============================================================
+    # INCIDENCIAS POR CONDICIÓN DE AUTORIZACIÓN DE LA EMBARCACIÓN
+    # Estas gráficas se agregan al final sin modificar las anteriores.
+    # ==============================================================
+    vessel_columns = [
+        column
+        for column in (
+            "embarcacion",
+            "nombre_embarcacion",
+            "embarcacion_nombre",
+            "embarcacion_anonima",
+        )
+        if column in data.columns
+    ]
+
+    if vessel_columns:
+        vessel_data = data.copy()
+        vessel_data["num_faltas"] = pd.to_numeric(
+            vessel_data["num_faltas"],
+            errors="coerce",
+        ).fillna(0)
+
+        # Conservar únicamente registros que realmente tengan incidencias.
+        if "es_falta" in vessel_data.columns:
+            fault_mask = (
+                vessel_data["es_falta"]
+                .fillna(False)
+                .astype(bool)
+            )
+        else:
+            fault_mask = vessel_data["num_faltas"] > 0
+
+        vessel_data = vessel_data.loc[fault_mask].copy()
+
+        # Tomar el primer nombre disponible sin reemplazar nombres reales.
+        vessel_names = pd.Series(
+            "",
+            index=vessel_data.index,
+            dtype="object",
+        )
+        for column in vessel_columns:
+            candidate = (
+                vessel_data[column]
+                .fillna("")
+                .astype(str)
+                .str.replace("\u00a0", " ", regex=False)
+                .str.strip()
+            )
+            vessel_names = vessel_names.mask(
+                vessel_names.eq(""),
+                candidate,
+            )
+
+        vessel_names = (
+            vessel_names
+            .str.replace(r"\s+", " ", regex=True)
+            .str.upper()
+        )
+        vessel_data["embarcacion_nombre"] = vessel_names
+
+        unauthorized_mask = vessel_names.str.fullmatch(
+            r"(?:NO[.\-]?|NO AUTORIZAD[AO]S?|"
+            r"EMBARCACI[ÓO]N(?:ES)? NO AUTORIZAD[AO]S?)",
+            case=False,
+            na=False,
+        )
+
+        invalid_names = {
+            "",
+            "NAN",
+            "NONE",
+            "N/A",
+            "NO APLICA",
+            "NO APLICA.",
+            "SIN DATO",
+            "SIN DATOS",
+            "SIN REGISTRO",
+            "SIN EMBARCACION",
+            "SIN EMBARCACIÓN",
+            "NO IDENTIFICADA",
+            "NO IDENTIFICADO",
+            "DESCONOCIDA",
+            "DESCONOCIDO",
+        }
+
+        # Embarcaciones autorizadas: se muestran individualmente por nombre.
+        authorized_data = vessel_data.loc[
+            ~unauthorized_mask
+            & ~vessel_names.isin(invalid_names)
+        ].copy()
+
+        if authorized_data.empty:
+            authorized_summary = pd.DataFrame(
+                columns=["embarcacion_nombre", "incidencias"]
+            )
+        else:
+            authorized_summary = (
+                authorized_data.groupby(
+                    "embarcacion_nombre",
+                    as_index=False,
+                )
+                .agg(incidencias=("num_faltas", "sum"))
+                .sort_values("incidencias", ascending=False)
+                .head(10)
+                .sort_values("incidencias", ascending=True)
+            )
+
+        authorized_figure = go.Figure()
+        if authorized_summary.empty:
+            authorized_figure.add_annotation(
+                text=(
+                    "No hay embarcaciones autorizadas con incidencias "
+                    "en el periodo seleccionado"
+                ),
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+            )
+            authorized_figure.update_xaxes(visible=False)
+            authorized_figure.update_yaxes(visible=False)
+        else:
+            authorized_figure.add_trace(
+                go.Bar(
+                    y=authorized_summary["embarcacion_nombre"],
+                    x=authorized_summary["incidencias"],
+                    orientation="h",
+                    marker_color="#00866A",
+                    text=authorized_summary["incidencias"].map(
+                        lambda value: f"{value:,.0f}"
+                    ),
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        "Incidencias: %{x:,.0f}"
+                        "<extra></extra>"
+                    ),
+                )
+            )
+
+        authorized_figure.update_layout(
+            title={
+                "text": "Embarcaciones autorizadas con incidencias",
+                "x": 0,
+                "xanchor": "left",
+            },
+            height=480,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font={
+                "family": "Inter, system-ui, sans-serif",
+                "color": "#16352D",
+            },
+            showlegend=False,
+            margin={"l": 20, "r": 55, "t": 75, "b": 45},
+            xaxis={
+                "title": "Incidencias registradas",
+                "rangemode": "tozero",
+                "tickformat": ",d",
+                "gridcolor": "#E1EBE7",
+                "zeroline": False,
+            },
+            yaxis={"title": "", "automargin": True},
+        )
+
+        # Las embarcaciones no autorizadas no tienen nombre individual en la
+        # fuente; por eso sus incidencias se presentan agrupadas por polígono.
+        unauthorized_data = vessel_data.loc[
+            unauthorized_mask
+        ].copy()
+        unauthorized_data["poligono_clave"] = (
+            unauthorized_data["poligono"]
+            .fillna("")
+            .map(_polygon_key)
+        )
+        unauthorized_data = unauthorized_data[
+            unauthorized_data["poligono_clave"].isin(POLYGON_NAMES)
+        ].copy()
+
+        if unauthorized_data.empty:
+            unauthorized_summary = pd.DataFrame(
+                columns=["poligono", "incidencias"]
+            )
+        else:
+            unauthorized_summary = (
+                unauthorized_data.groupby(
+                    "poligono_clave",
+                    as_index=False,
+                )
+                .agg(incidencias=("num_faltas", "sum"))
+            )
+            unauthorized_summary["poligono"] = (
+                unauthorized_summary["poligono_clave"]
+                .map(POLYGON_NAMES)
+            )
+            unauthorized_summary = unauthorized_summary.sort_values(
+                "incidencias",
+                ascending=True,
+            )
+
+        unauthorized_figure = go.Figure()
+        if unauthorized_summary.empty:
+            unauthorized_figure.add_annotation(
+                text=(
+                    "No hay embarcaciones sin autorización con incidencias "
+                    "en el periodo seleccionado"
+                ),
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+            )
+            unauthorized_figure.update_xaxes(visible=False)
+            unauthorized_figure.update_yaxes(visible=False)
+        else:
+            unauthorized_figure.add_trace(
+                go.Bar(
+                    y=unauthorized_summary["poligono"],
+                    x=unauthorized_summary["incidencias"],
+                    orientation="h",
+                    marker_color="#C44E52",
+                    text=unauthorized_summary["incidencias"].map(
+                        lambda value: f"{value:,.0f}"
+                    ),
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        "Incidencias de embarcaciones sin autorización: "
+                        "%{x:,.0f}"
+                        "<extra></extra>"
+                    ),
+                )
+            )
+
+        unauthorized_figure.update_layout(
+            title={
+                "text": "Embarcaciones sin autorización con incidencias",
+                "x": 0,
+                "xanchor": "left",
+            },
+            height=480,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font={
+                "family": "Inter, system-ui, sans-serif",
+                "color": "#16352D",
+            },
+            showlegend=False,
+            margin={"l": 20, "r": 55, "t": 75, "b": 45},
+            xaxis={
+                "title": "Incidencias registradas",
+                "rangemode": "tozero",
+                "tickformat": ",d",
+                "gridcolor": "#E1EBE7",
+                "zeroline": False,
+            },
+            yaxis={"title": "", "automargin": True},
+        )
+
+        authorized_column, unauthorized_column = st.columns(
+            [1, 1],
+            gap="large",
+        )
+        with authorized_column:
+            st.plotly_chart(
+                authorized_figure,
+                use_container_width=True,
+            )
+
+        with unauthorized_column:
+            st.plotly_chart(
+                unauthorized_figure,
+                use_container_width=True,
+            )
+    else:
+        st.info(
+            "No existe una columna de embarcación disponible para generar "
+            "las gráficas de autorización."
+        )
