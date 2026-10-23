@@ -128,7 +128,7 @@ with st.sidebar:
     st.page_link("app.py", label="Tablero principal")
     st.page_link(
         "pages/2_Administracion_de_datos.py",
-        label="Calidad de datos y Carga de datos",
+        label="Calidad de datos y carga de datos",
     )
     st.page_link("pages/1_Registros.py", label="Registros")
     
