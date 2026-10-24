@@ -31,7 +31,6 @@ DEFAULT_GEOJSON_PATH = (
 )
 
 st.set_page_config(
-    
     page_title="Vigilancia CONANP",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -49,36 +48,6 @@ def apply_styles() -> None:
             f"<style>{styles}</style>",
             unsafe_allow_html=True,
         )
-
-def require_optional_password() -> None:
-    try:
-        expected = st.secrets.get("APP_PASSWORD", "")
-    except Exception:
-        expected = ""
-
-    if not expected or st.session_state.get("authenticated"):
-        return
-
-    apply_login_background()
-
-    st.title("Acceso al tablero")
-    password = st.text_input(
-        "Contraseña",
-        type="password",
-    )
-
-    if st.button(
-        "Ingresar",
-        type="primary",
-        use_container_width=True,
-    ):
-        if password == expected:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("La contraseña no es correcta.")
-
-    st.stop()
 
         #fondo en pantalla de acceso 
 def apply_login_background() -> None:
@@ -104,7 +73,7 @@ def apply_login_background() -> None:
             background:
                 linear-gradient(
                     rgba(0, 45, 36, 0.25),
-                    rgba(0, 45, 36, 0.25)
+                    rgba(0, 45, 36, 0.48)
                 ),
                 url("data:image/jpeg;base64,{encoded_image}");
             background-size: cover;
@@ -127,8 +96,44 @@ def apply_login_background() -> None:
         unsafe_allow_html=True,
     )
 
+def require_optional_password() -> None:
+    try:
+        expected = st.secrets.get(
+            "APP_PASSWORD",
+            "",
+        )
+    except Exception:
+        expected = ""
 
-   
+    if (
+        not expected
+        or st.session_state.get("authenticated")
+    ):
+        return
+
+    apply_login_background()
+
+    st.title("Acceso al tablero")
+
+    password = st.text_input(
+        "Contraseña",
+        type="password",
+    )
+
+    if st.button(
+        "Ingresar",
+        type="primary",
+        use_container_width=True,
+    ):
+        if password == expected:
+            st.session_state.authenticated = True
+            st.rerun()
+
+        st.error(
+            "La contraseña no es correcta."
+        )
+
+    st.stop()
 
 
 @st.cache_data(show_spinner=False)
