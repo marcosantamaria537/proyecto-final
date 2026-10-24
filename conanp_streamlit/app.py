@@ -440,7 +440,7 @@ with header_left:
     )
 
 with header_right:
-    logo_path = ROOT / "assets" / "conanp_logo.png"
+    logo_path = ROOT / "assets" / "Conanp_Logo_Vector.png"
 
     if logo_path.exists():
         st.image(
