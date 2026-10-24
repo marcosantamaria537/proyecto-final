@@ -11,3 +11,4 @@ data/*.sqlite*
 data/*.zip
 data/*.geojson
 !data/README.md
+.streamlit/secrets.toml
