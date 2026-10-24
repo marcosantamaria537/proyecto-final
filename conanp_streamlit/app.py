@@ -52,21 +52,16 @@ def apply_styles() -> None:
 
 def require_optional_password() -> None:
     try:
-        expected = st.secrets.get(
-            "APP_PASSWORD",
-            "",
-        )
+        expected = st.secrets.get("APP_PASSWORD", "")
     except Exception:
         expected = ""
 
-    if (
-        not expected
-        or st.session_state.get("authenticated")
-    ):
+    if not expected or st.session_state.get("authenticated"):
         return
 
-    st.title("Acceso al tablero")
+    apply_login_background()
 
+    st.title("Acceso al tablero")
     password = st.text_input(
         "Contraseña",
         type="password",
@@ -80,10 +75,8 @@ def require_optional_password() -> None:
         if password == expected:
             st.session_state.authenticated = True
             st.rerun()
-
-        st.error(
-            "La contraseña no es correcta."
-        )
+        else:
+            st.error("La contraseña no es correcta.")
 
     st.stop()
 
