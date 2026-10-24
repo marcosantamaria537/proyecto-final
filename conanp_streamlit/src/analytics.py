@@ -338,7 +338,7 @@ def build_measure_chart(data: pd.DataFrame) -> go.Figure:
         )
         return _style(
             figure,
-            "Medidas tomadas — versión 2",
+            "Medidas tomadas",
         )
 
     figure = px.treemap(
