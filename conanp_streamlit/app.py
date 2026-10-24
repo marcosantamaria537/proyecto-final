@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_GEOJSON_PATH = (
     ROOT
     / "data"
-    / "poligonos_marinos_artificiales_cancun.geojson"
+    / "sub_PNCOIMPCyPN.geojson"
 )
 
 st.set_page_config(
