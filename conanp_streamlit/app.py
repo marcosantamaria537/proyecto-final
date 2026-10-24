@@ -97,15 +97,6 @@ def apply_login_background() -> None:
         unsafe_allow_html=True,
     )
 
-def require_login() -> None:
-    """Solicita usuario y contraseña antes de mostrar el tablero."""
-
-    # Si el usuario ya inició sesión, permite continuar.
-    if st.session_state.get("authenticated", False):
-        return
-
-    # Fondo que configuramos para la pantalla de acceso.
-    apply_login_background()
 
     # Oculta el panel lateral mientras no haya iniciado sesión.
     st.markdown(
@@ -263,7 +254,6 @@ def filter_period_and_polygon(
 
 
 apply_styles()
-require_login()
 
 try:
     connection = st.connection(
