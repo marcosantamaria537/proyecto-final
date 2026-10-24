@@ -72,31 +72,70 @@ def _polygon_key(value: object) -> str:
     return "sin_clasificar"
 
 
-def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
-    """Agrupa y suma las faltas de todas las variantes de cada polígono."""
+def _subpolygon_key(value: object) -> str:
+    """Normaliza una clave como ``(UPA 1-2)`` a ``UPA1-2``."""
 
-    required_columns = {"poligono", "num_faltas"}
+    if value is None or pd.isna(value):
+        return ""
+
+    normalized = unicodedata.normalize("NFKD", str(value))
+    normalized = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    ).upper()
+    return re.sub(r"[^A-Z0-9]+", "", normalized)
+
+
+def _extract_subpolygon_keys(value: object) -> list[str]:
+    """Extrae una o varias claves de la columna ``subpoligono``."""
+
+    if value is None or pd.isna(value):
+        return []
+
+    text = unicodedata.normalize("NFKD", str(value))
+    text = "".join(
+        character
+        for character in text
+        if not unicodedata.combining(character)
+    ).upper()
+
+    # Reconoce ASRN-1, RC-1, P 1-1, UPA 2-3 y UPPMA 3-1,
+    # aunque tengan espacios o estén escritos entre paréntesis.
+    matches = re.findall(
+        r"\b(?:UPPMA|UPA|P)\s*[- ]?\s*\d+\s*-\s*\d+\b"
+        r"|\b(?:ASRN|RC)\s*-\s*\d+\b",
+        text,
+    )
+    keys = [_subpolygon_key(match) for match in matches]
+
+    # Evita duplicar una clave dentro del mismo registro conservando el orden.
+    return list(dict.fromkeys(keys))
+
+
+def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
+    """Agrupa las faltas por subpolígono usando la clave oficial ABRE."""
+
+    required_columns = {"subpoligono", "num_faltas"}
     if data.empty or not required_columns.issubset(data.columns):
-        return pd.DataFrame(columns=["poligono_clave", "faltas"])
+        return pd.DataFrame(columns=["subpoligono_clave", "faltas"])
 
     working = data.copy()
     working["num_faltas"] = pd.to_numeric(
         working["num_faltas"],
         errors="coerce",
     ).fillna(0)
-    working["poligono_clave"] = (
-        working["poligono"]
-        .fillna("")
-        .map(_polygon_key)
+    working["subpoligono_clave"] = working["subpoligono"].map(
+        _extract_subpolygon_keys
     )
-
-    # Evita que nombres no reconocidos alteren la escala del mapa.
+    working = working.explode("subpoligono_clave")
     working = working[
-        working["poligono_clave"].isin(POLYGON_NAMES)
+        working["subpoligono_clave"].notna()
+        & working["subpoligono_clave"].ne("")
     ].copy()
 
     polygon_counts = (
-        working.groupby("poligono_clave", as_index=False)
+        working.groupby("subpoligono_clave", as_index=False)
         .agg(faltas=("num_faltas", "sum"))
     )
     polygon_counts["faltas"] = (
@@ -118,7 +157,7 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
     count_map = dict(
         zip(
             polygon_counts.get(
-                "poligono_clave",
+                "subpoligono_clave",
                 pd.Series(dtype=str),
             ),
             polygon_counts.get(
@@ -140,10 +179,16 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
             or ""
         )
         key = _polygon_key(source_name)
+        subpolygon_key = _subpolygon_key(
+            properties.get("ABRE")
+            or properties.get("clave_subzona")
+            or ""
+        )
 
         properties["__poligono_clave"] = key
+        properties["__subpoligono_clave"] = subpolygon_key
         properties["faltas_registradas"] = int(
-            round(count_map.get(key, 0))
+            round(count_map.get(subpolygon_key, 0))
         )
         # Campos comunes para que el mismo tooltip funcione con ambos
         # archivos GeoJSON. En el nuevo archivo, NOM2 es el nombre de la
