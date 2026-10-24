@@ -249,7 +249,12 @@ def build_fault_type_chart(data: pd.DataFrame) -> go.Figure:
     else:
         counts = data.groupby("tipo_falta", as_index=False)["cantidad"].sum().nlargest(8, "cantidad").sort_values("cantidad").rename(columns={"cantidad": "faltas"})
     fig = px.bar(counts, x="faltas", y="tipo_falta", orientation="h", color_discrete_sequence=[GREEN])
-    fig.update_traces(hovertemplate="%{y}<br>%{x} faltas<extra></extra>")
+    fig.update_traces(
+    texttemplate="%{x:,.0f}",
+    textposition="outside",
+    cliponaxis=False,
+    hovertemplate="%{y}<br>%{x:,.0f} faltas<extra></extra>",
+)
     fig.update_xaxes(title="Faltas")
     fig.update_yaxes(title=None)
     return _style(fig, "Faltas por categoría")
