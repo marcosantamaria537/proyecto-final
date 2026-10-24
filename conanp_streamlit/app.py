@@ -281,21 +281,6 @@ except DatabaseLoadError as exc:
 
 
 with st.sidebar:
-    username = st.session_state.get(
-        "username",
-        "Usuario",
-    )
-
-    st.markdown(f"**Sesión:** {username}")
-
-    if st.button(
-        "Cerrar sesión",
-        use_container_width=True,
-    ):
-        st.session_state.clear()
-        st.rerun()
-
-    st.divider()
     st.markdown("### Navegación")
 
     st.page_link(
