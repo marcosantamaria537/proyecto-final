@@ -73,7 +73,7 @@ def apply_login_background() -> None:
             background:
                 linear-gradient(
                     rgba(0, 45, 36, 0.25),
-                    rgba(0, 45, 36, 0.48)
+                    rgba(0, 45, 36, 0.25)
                 ),
                 url("data:image/jpeg;base64,{encoded_image}");
             background-size: cover;
