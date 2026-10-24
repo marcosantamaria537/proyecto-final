@@ -108,7 +108,11 @@ def _prepare_polygon_counts(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
-    """Añade al GeoJSON la clave común y el total de faltas."""
+    """Normaliza GeoJSON generales o de subzonas y añade sus faltas.
+
+    También admite el archivo oficial de subzonificación cuyos atributos
+    son ISLA, NOM2, ABRE y SUBZONIF.
+    """
 
     prepared = copy.deepcopy(geojson)
     count_map = dict(
@@ -127,7 +131,9 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
     for feature in prepared.get("features", []):
         properties = feature.setdefault("properties", {})
         source_name = (
-            properties.get("poligono")
+            properties.get("ISLA")
+            or properties.get("isla")
+            or properties.get("poligono")
             or properties.get("nombre")
             or properties.get("name")
             or properties.get("sector")
@@ -139,8 +145,32 @@ def _prepare_geojson(geojson: dict, polygon_counts: pd.DataFrame) -> dict:
         properties["faltas_registradas"] = int(
             round(count_map.get(key, 0))
         )
-        properties.setdefault("poligono", "SIN ESPECIFICAR")
-        properties.setdefault("sector", "SIN ESPECIFICAR")
+        # Campos comunes para que el mismo tooltip funcione con ambos
+        # archivos GeoJSON. En el nuevo archivo, NOM2 es el nombre de la
+        # subárea y SUBZONIF contiene su tipo de zonificación.
+        properties["poligono"] = (
+            POLYGON_NAMES.get(key)
+            or properties.get("poligono")
+            or str(source_name).strip()
+            or "SIN ESPECIFICAR"
+        )
+        properties["subpoligono"] = (
+            properties.get("NOM2")
+            or properties.get("subpoligono")
+            or properties.get("sector")
+            or "SIN ESPECIFICAR"
+        )
+        properties["clave_subzona"] = (
+            properties.get("ABRE")
+            or properties.get("clave_subzona")
+            or "SIN ESPECIFICAR"
+        )
+        properties["subzona"] = (
+            properties.get("SUBZONIF")
+            or properties.get("subzona")
+            or "SIN ESPECIFICAR"
+        )
+        properties.setdefault("sector", properties["subpoligono"])
         properties.setdefault("superficie_declarada_ha", 0)
 
     return prepared
@@ -337,14 +367,16 @@ def render_surveillance_map(
             tooltip=folium.GeoJsonTooltip(
                 fields=[
                     "poligono",
-                    "sector",
-                    "superficie_declarada_ha",
+                    "subpoligono",
+                    "clave_subzona",
+                    "subzona",
                     "faltas_registradas",
                 ],
                 aliases=[
-                    "Polígono:",
-                    "Sector:",
-                    "Superficie oficial (ha):",
+                    "Polígono principal:",
+                    "Subpolígono:",
+                    "Clave:",
+                    "Subzona:",
                     "Faltas registradas:",
                 ],
                 localize=True,
