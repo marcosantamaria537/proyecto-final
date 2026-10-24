@@ -18,6 +18,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+if not st.session_state.get(
+    "authenticated",
+    False,
+):
+    st.warning(
+        "Debes iniciar sesión para acceder a esta página."
+    )
+
+    if st.button("Ir al inicio de sesión"):
+        st.switch_page("app.py")
+
+    st.stop()
 
 def apply_styles() -> None:
     styles_path = ROOT / "assets" / "styles.css"

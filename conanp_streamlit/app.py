@@ -31,11 +31,24 @@ DEFAULT_GEOJSON_PATH = (
 )
 
 st.set_page_config(
+    
     page_title="Vigilancia CONANP",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+if not st.session_state.get(
+    "authenticated",
+    False,
+):
+    st.warning(
+        "Debes iniciar sesión para acceder a esta página."
+    )
+
+    if st.button("Ir al inicio de sesión"):
+        st.switch_page("app.py")
+
+    st.stop()
 
 def apply_styles() -> None:
     styles_path = ROOT / "assets" / "styles.css"
@@ -96,41 +109,88 @@ def apply_login_background() -> None:
         unsafe_allow_html=True,
     )
 
-def require_optional_password() -> None:
-    try:
-        expected = st.secrets.get(
-            "APP_PASSWORD",
-            "",
-        )
-    except Exception:
-        expected = ""
+def require_login() -> None:
+    """Solicita usuario y contraseña antes de mostrar el tablero."""
 
-    if (
-        not expected
-        or st.session_state.get("authenticated")
-    ):
+    # Si el usuario ya inició sesión, permite continuar.
+    if st.session_state.get("authenticated", False):
         return
 
+    # Fondo que configuramos para la pantalla de acceso.
     apply_login_background()
 
-    st.title("Acceso al tablero")
+    # Oculta el panel lateral mientras no haya iniciado sesión.
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none;
+        }
 
-    password = st.text_input(
-        "Contraseña",
-        type="password",
+        [data-testid="collapsedControl"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    if st.button(
-        "Ingresar",
-        type="primary",
-        use_container_width=True,
-    ):
-        if password == expected:
-            st.session_state.authenticated = True
+    st.title("Acceso al tablero")
+    st.caption(
+        "Ingresa tus credenciales para consultar el sistema."
+    )
+
+    try:
+        configured_users = dict(
+            st.secrets.get("APP_USERS", {})
+        )
+    except Exception:
+        configured_users = {}
+
+    if not configured_users:
+        st.error(
+            "No existen usuarios configurados en "
+            "Streamlit Secrets."
+        )
+        st.stop()
+
+    # El formulario evita que Streamlit valide antes
+    # de que se presione el botón.
+    with st.form("login_form"):
+        username = st.text_input(
+            "Usuario",
+            placeholder="Escribe tu usuario",
+        )
+
+        password = st.text_input(
+            "Contraseña",
+            type="password",
+            placeholder="Escribe tu contraseña",
+        )
+
+        submitted = st.form_submit_button(
+            "Ingresar",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if submitted:
+        username = username.strip()
+
+        expected_password = configured_users.get(
+            username
+        )
+
+        if (
+            expected_password is not None
+            and password == expected_password
+        ):
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
             st.rerun()
 
         st.error(
-            "La contraseña no es correcta."
+            "El usuario o la contraseña no son correctos."
         )
 
     st.stop()
@@ -215,7 +275,7 @@ def filter_period_and_polygon(
 
 
 apply_styles()
-require_optional_password()
+require_login()
 
 try:
     connection = st.connection(
@@ -243,6 +303,21 @@ except DatabaseLoadError as exc:
 
 
 with st.sidebar:
+    username = st.session_state.get(
+        "username",
+        "Usuario",
+    )
+
+    st.markdown(f"**Sesión:** {username}")
+
+    if st.button(
+        "Cerrar sesión",
+        use_container_width=True,
+    ):
+        st.session_state.clear()
+        st.rerun()
+
+    st.divider()
     st.markdown("### Navegación")
 
     st.page_link(
