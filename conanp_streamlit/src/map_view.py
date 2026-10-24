@@ -378,7 +378,7 @@ def render_surveillance_map(
                     "fillColor": (
                         color_scale(value) if value > 0 else "#DCE5E8"
                     ),
-                    "fillOpacity": 0.55 if value > 0 else 0.20,
+                    "fillOpacity": 0.80 if value > 0 else 0.20,
                     "color": "#174A5B",
                     "weight": 0.5,
                 }
