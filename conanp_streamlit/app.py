@@ -50,6 +50,43 @@ def apply_styles() -> None:
             unsafe_allow_html=True,
         )
 
+def require_optional_password() -> None:
+    try:
+        expected = st.secrets.get(
+            "APP_PASSWORD",
+            "",
+        )
+    except Exception:
+        expected = ""
+
+    if (
+        not expected
+        or st.session_state.get("authenticated")
+    ):
+        return
+
+    st.title("Acceso al tablero")
+
+    password = st.text_input(
+        "Contraseña",
+        type="password",
+    )
+
+    if st.button(
+        "Ingresar",
+        type="primary",
+        use_container_width=True,
+    ):
+        if password == expected:
+            st.session_state.authenticated = True
+            st.rerun()
+
+        st.error(
+            "La contraseña no es correcta."
+        )
+
+    st.stop()
+
         #fondo en pantalla de acceso 
 def apply_login_background() -> None:
     """Coloca una imagen de fondo únicamente en la pantalla de acceso."""
@@ -254,6 +291,7 @@ def filter_period_and_polygon(
 
 
 apply_styles()
+require_optional_password()
 
 try:
     connection = st.connection(
