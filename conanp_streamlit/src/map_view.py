@@ -390,7 +390,7 @@ def render_surveillance_map(
                 highlight_function=lambda _: {
                     "color": "#FF8C00",
                     "weight": 2,
-                    "fillOpacity": 0,
+                    "fillOpacity": 0.1,
                 },
             ).add_to(map_object)
             color_scale.add_to(map_object)
