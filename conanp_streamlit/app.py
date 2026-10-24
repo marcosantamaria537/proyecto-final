@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import base64
 import json
 from datetime import date
 from pathlib import Path
@@ -49,6 +49,52 @@ def apply_styles() -> None:
             unsafe_allow_html=True,
         )
 
+        #fondo en pantalla de acceso 
+def apply_login_background() -> None:
+    """Coloca una imagen de fondo únicamente en la pantalla de acceso."""
+
+    image_path = (
+        Path(__file__).resolve().parent
+        / "assets"
+        / "fondo_inicio.jpg"
+    )
+
+    if not image_path.exists():
+        return
+
+    encoded_image = base64.b64encode(
+        image_path.read_bytes()
+    ).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background:
+                linear-gradient(
+                    rgba(0, 45, 36, 0.48),
+                    rgba(0, 45, 36, 0.48)
+                ),
+                url("data:image/jpeg;base64,{encoded_image}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+
+        /* Cuadro del formulario */
+        [data-testid="stMainBlockContainer"] {{
+            background-color: rgba(255, 255, 255, 0.88);
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 750px;
+            margin-top: 7rem;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def require_optional_password() -> None:
     try:
@@ -65,6 +111,8 @@ def require_optional_password() -> None:
     ):
         return
 
+    apply_login_background()
+    
     st.title("Acceso al tablero")
 
     password = st.text_input(
