@@ -72,7 +72,7 @@ def apply_login_background() -> None:
         .stApp {{
             background:
                 linear-gradient(
-                    rgba(0, 45, 36, 0.48),
+                    rgba(0, 45, 36, 0.25),
                     rgba(0, 45, 36, 0.48)
                 ),
                 url("data:image/jpeg;base64,{encoded_image}");
@@ -112,7 +112,7 @@ def require_optional_password() -> None:
         return
 
     apply_login_background()
-    
+
     st.title("Acceso al tablero")
 
     password = st.text_input(
