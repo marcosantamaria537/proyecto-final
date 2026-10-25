@@ -336,6 +336,17 @@ def render_surveillance_map(
         max_zoom=19,
     ).add_to(map_object)
 
+    # Si los filtros no devolvieron supervisiones, conservar solamente
+    # el mapa base. No se crean capas GeoJSON, escalas ni tablas vacías.
+    if data.empty:
+        st_folium(
+            map_object,
+            use_container_width=True,
+            height=560,
+            returned_objects=[],
+        )
+        return
+
     if geojson:
         polygon_counts = _prepare_polygon_counts(data)
         prepared = _prepare_geojson(geojson, polygon_counts)
@@ -361,6 +372,18 @@ def render_surveillance_map(
                     filtered_features.append(feature)
 
             prepared["features"] = filtered_features
+
+        # Puede haber nombres de polígonos en PostgreSQL que todavía no
+        # cuenten con una geometría equivalente en el archivo GeoJSON.
+        # Folium no debe intentar renderizar una colección vacía.
+        if not prepared.get("features"):
+            st_folium(
+                map_object,
+                use_container_width=True,
+                height=560,
+                returned_objects=[],
+            )
+            return
 
         # Capa base visible incluso cuando un polígono no tiene faltas.
         folium.GeoJson(
