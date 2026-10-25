@@ -299,6 +299,8 @@ def render_surveillance_map(
     data: pd.DataFrame,
     geojson: dict | None,
     recorridos: pd.DataFrame | None = None,
+    selected_polygons: list[str] | None = None,
+    selected_subpolygons: list[str] | None = None,
 ) -> None:
     """Muestra los polígonos coloreados según sus faltas registradas."""
 
@@ -338,6 +340,39 @@ def render_surveillance_map(
     if geojson:
         polygon_counts = _prepare_polygon_counts(data)
         prepared = _prepare_geojson(geojson, polygon_counts)
+
+        # El filtro de Streamlit también debe aplicarse a las geometrías.
+        # Sin este paso, los datos se filtran, pero Folium continúa
+        # dibujando los 20 subpolígonos del archivo GeoJSON.
+        selected_polygon_keys = {
+            _polygon_key(value)
+            for value in (selected_polygons or [])
+        }
+        selected_subpolygon_keys = {
+            _subpolygon_key(value)
+            for value in (selected_subpolygons or [])
+        }
+
+        if selected_polygon_keys or selected_subpolygon_keys:
+            filtered_features = []
+
+            for feature in prepared.get("features", []):
+                properties = feature.get("properties", {})
+                polygon_matches = (
+                    not selected_polygon_keys
+                    or properties.get("__poligono_clave")
+                    in selected_polygon_keys
+                )
+                subpolygon_matches = (
+                    not selected_subpolygon_keys
+                    or properties.get("__subpoligono_clave")
+                    in selected_subpolygon_keys
+                )
+
+                if polygon_matches and subpolygon_matches:
+                    filtered_features.append(feature)
+
+            prepared["features"] = filtered_features
 
         # Capa base visible incluso cuando un polígono no tiene faltas.
         folium.GeoJson(
