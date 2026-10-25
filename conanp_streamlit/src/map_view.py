@@ -318,7 +318,7 @@ def render_surveillance_map(
         # Vista inicial fija para mostrar Isla Mujeres, Punta Cancun
         # y Punta Nizuc desde la primera apertura de la pestana.
         location=[21.127, -86.763],
-        zoom_start=15.1,
+        zoom_start=11.1,
         zoom_snap=0.1,
         tiles=None,
         control_scale=True,
