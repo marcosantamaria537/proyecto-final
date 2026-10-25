@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 import base64
 import json
 from datetime import date
@@ -136,6 +137,7 @@ def require_optional_password() -> None:
     st.stop()
 
 
+
 @st.cache_data(show_spinner=False)
 def cached_geojson_load(
     file_bytes: bytes,
@@ -168,16 +170,31 @@ def cached_default_geojson_load() -> dict | None:
     except (OSError, json.JSONDecodeError):
         return None
 def clean_polygon_label(value: object) -> str:
-    """Limpia el nombre visible del polígono."""
+    """Limpia el nombre y conserva solo el primer polígono indicado."""
     if pd.isna(value):
         return ""
 
-    return " ".join(
+    cleaned = " ".join(
         str(value)
         .replace("\u00a0", " ")
         .strip()
         .split()
     ).upper()
+
+    # Un registro puede contener varios valores, por ejemplo:
+    # "POLÍGONO 1, POLÍGONO 2, POLÍGONO 3".
+    # Para el filtro se toma únicamente el primero que aparece.
+    match = re.search(
+        r"\bPOL[IÍ]GONO\s*0*(\d+)\b",
+        cleaned,
+    )
+
+    if match:
+        return f"POLÍGONO {int(match.group(1))}"
+
+    # Conserva sin cambios los nombres que no utilizan
+    # la forma "POLÍGONO + número".
+    return cleaned
 
 
 def polygon_key(value: object) -> str:
