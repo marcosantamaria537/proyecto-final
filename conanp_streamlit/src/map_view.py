@@ -300,7 +300,6 @@ def render_surveillance_map(
     geojson: dict | None,
     recorridos: pd.DataFrame | None = None,
     selected_polygons: list[str] | None = None,
-    selected_subpolygons: list[str] | None = None,
 ) -> None:
     """Muestra los polígonos coloreados según sus faltas registradas."""
 
@@ -348,12 +347,7 @@ def render_surveillance_map(
             _polygon_key(value)
             for value in (selected_polygons or [])
         }
-        selected_subpolygon_keys = {
-            _subpolygon_key(value)
-            for value in (selected_subpolygons or [])
-        }
-
-        if selected_polygon_keys or selected_subpolygon_keys:
+        if selected_polygon_keys:
             filtered_features = []
 
             for feature in prepared.get("features", []):
@@ -363,13 +357,7 @@ def render_surveillance_map(
                     or properties.get("__poligono_clave")
                     in selected_polygon_keys
                 )
-                subpolygon_matches = (
-                    not selected_subpolygon_keys
-                    or properties.get("__subpoligono_clave")
-                    in selected_subpolygon_keys
-                )
-
-                if polygon_matches and subpolygon_matches:
+                if polygon_matches:
                     filtered_features.append(feature)
 
             prepared["features"] = filtered_features

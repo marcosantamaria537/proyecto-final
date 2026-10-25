@@ -202,47 +202,11 @@ def polygon_key(value: object) -> str:
     return normalize_name(clean_polygon_label(value))
 
 
-def subpolygon_key(value: object) -> str:
-    """Normaliza la clave de un subpolígono para poder compararla."""
-    if value is None or pd.isna(value):
-        return ""
-
-    normalized = normalize_name(str(value)).upper()
-    return re.sub(r"[^A-Z0-9]+", "", normalized)
-
-
-def extract_subpolygon_keys(value: object) -> list[str]:
-    """Extrae todos los subpolígonos contenidos en un mismo registro."""
-    if value is None or pd.isna(value):
-        return []
-
-    normalized = normalize_name(str(value)).upper()
-    matches = re.findall(
-        r"\b(?:UPPMA|UPA|P)\s*[- ]?\s*\d+\s*-\s*\d+\b"
-        r"|\b(?:ASRN|RC)\s*-\s*\d+\b",
-        normalized,
-    )
-    return list(dict.fromkeys(subpolygon_key(item) for item in matches))
-
-
-def subpolygon_label(key: str) -> str:
-    """Genera una etiqueta legible a partir de la clave normalizada."""
-    match = re.fullmatch(r"(UPPMA|UPA|P)(\d+-\d+)", key)
-    if match:
-        return f"{match.group(1)} {match.group(2)}"
-
-    match = re.fullmatch(r"(ASRN|RC)(\d+)", key)
-    if match:
-        return f"{match.group(1)}-{match.group(2)}"
-
-    return key
-
 def filter_period_and_polygon(
     data: pd.DataFrame,
     start_date: date,
     end_date: date,
     polygons: list[str],
-    subpolygons: list[str] | None = None,
 ) -> pd.DataFrame:
     start = pd.Timestamp(start_date)
     end = (
@@ -264,19 +228,6 @@ def filter_period_and_polygon(
         )
 
         mask &= data_polygon_keys.isin(selected_keys)
-
-    if subpolygons and "subpoligono" in data.columns:
-        selected_subpolygon_keys = {
-            subpolygon_key(value)
-            for value in subpolygons
-        }
-
-        mask &= data["subpoligono"].map(
-            lambda value: bool(
-                set(extract_subpolygon_keys(value))
-                & selected_subpolygon_keys
-            )
-        )
 
     return data.loc[mask].copy()
 
@@ -469,30 +420,6 @@ with st.sidebar:
         placeholder="Todos",
     )
 
-    # Construir opciones individuales aunque una celda contenga
-    # dos o más subpolígonos separados por comas.
-    subpolygon_keys: set[str] = set()
-
-    for frame in (supervisions, recorridos):
-        if "subpoligono" not in frame.columns:
-            continue
-
-        for value in frame["subpoligono"].dropna():
-            subpolygon_keys.update(
-                extract_subpolygon_keys(value)
-            )
-
-    subpolygon_options = [
-        subpolygon_label(key)
-        for key in sorted(subpolygon_keys)
-    ]
-
-    selected_subpolygons = st.multiselect(
-        "Subpolígono",
-        subpolygon_options,
-        placeholder="Todos",
-    )
-
     fault_options = sorted(
         fault_details["tipo_falta"]
         .dropna()
@@ -507,7 +434,7 @@ with st.sidebar:
     )
 
     st.caption(
-        "El periodo, el polígono y el subpolígono se aplican "
+        "El periodo y el polígono se aplican "
         "a supervisiones y recorridos."
     )
 
@@ -517,7 +444,6 @@ filtered_supervisions = filter_period_and_polygon(
     start_date,
     end_date,
     selected_polygons,
-    selected_subpolygons,
 )
 
 filtered_recorridos = filter_period_and_polygon(
@@ -525,7 +451,6 @@ filtered_recorridos = filter_period_and_polygon(
     start_date,
     end_date,
     selected_polygons,
-    selected_subpolygons,
 )
 
 filtered_fault_details = filter_period_and_polygon(
@@ -533,7 +458,6 @@ filtered_fault_details = filter_period_and_polygon(
     start_date,
     end_date,
     selected_polygons,
-    selected_subpolygons,
 )
 
 
@@ -690,7 +614,6 @@ with spatial_tab:
     polygons_geojson,
     filtered_recorridos,
     selected_polygons,
-    selected_subpolygons,
 )
 
 
