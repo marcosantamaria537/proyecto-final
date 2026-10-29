@@ -406,6 +406,7 @@ def render_surveillance_map(
             ) > 0
         ]
 
+        color_scale = None
         if positive_values:
             minimum = min(positive_values)
             maximum = max(positive_values)
@@ -415,30 +416,36 @@ def render_surveillance_map(
             color_scale = linear.YlOrRd_09.scale(minimum, maximum)
             color_scale.caption = "Faltas registradas"
 
-            def fault_style(feature: dict) -> dict:
-                value = feature.get("properties", {}).get(
-                    "faltas_registradas",
-                    0,
-                )
-                return {
-                    "fillColor": (
-                        color_scale(value) if value > 0 else "#DCE5E8"
-                    ),
-                    "fillOpacity": 0.80 if value > 0 else 0.20,
-                    "color": "#174A5B",
-                    "weight": 0.5,
-                }
+        def fault_style(feature: dict) -> dict:
+            value = feature.get("properties", {}).get(
+                "faltas_registradas",
+                0,
+            )
+            return {
+                "fillColor": (
+                    color_scale(value)
+                    if value > 0 and color_scale is not None
+                    else "#B8BFC3"
+                ),
+                "fillOpacity": 0.80 if value > 0 else 0.85,
+                "color": "#174A5B",
+                "weight": 0.5,
+            }
 
-            folium.GeoJson(
-                prepared,
-                name="Faltas por polígono",
-                style_function=fault_style,
-                highlight_function=lambda _: {
-                    "color": "#FF8C00",
-                    "weight": 2,
-                    "fillOpacity": 0.1,
-                },
-            ).add_to(map_object)
+        # Esta capa se crea incluso cuando todos los valores son cero,
+        # para que los subpolígonos sin faltas siempre aparezcan en gris.
+        folium.GeoJson(
+            prepared,
+            name="Faltas por polígono",
+            style_function=fault_style,
+            highlight_function=lambda _: {
+                "color": "#FF8C00",
+                "weight": 2,
+                "fillOpacity": 0.1,
+            },
+        ).add_to(map_object)
+
+        if color_scale is not None:
             color_scale.add_to(map_object)
 
         # Capa independiente para mostrar información al pasar el cursor.
