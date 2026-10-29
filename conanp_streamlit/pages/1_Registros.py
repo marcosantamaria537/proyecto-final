@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import re
+import unicodedata
 
 import pandas as pd
 import streamlit as st
@@ -102,10 +104,108 @@ def text_search(data: pd.DataFrame, value: str) -> pd.DataFrame:
     return data.loc[mask]
 
 
-def options(data: pd.DataFrame, column: str) -> list[str]:
+INVALID_FILTER_VALUES = {
+    "",
+    "n/a",
+    "nan",
+    "no",
+    "no aplica",
+    "none",
+    "sin especificar",
+}
+
+
+def filter_key(value: object) -> str:
+    """Genera una clave comparable sin alterar los datos mostrados."""
+
+    if pd.isna(value):
+        return ""
+
+    text = " ".join(
+        str(value).replace("\u00a0", " ").strip().split()
+    )
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(
+        character
+        for character in text
+        if not unicodedata.combining(character)
+    ).casefold()
+
+
+def split_filter_values(
+    value: object,
+    split_multiple: bool = False,
+) -> list[str]:
+    """Limpia un valor y, si corresponde, separa opciones combinadas."""
+
+    if pd.isna(value):
+        return []
+
+    text = " ".join(
+        str(value).replace("\u00a0", " ").strip().split()
+    )
+    if not text:
+        return []
+
+    parts = (
+        re.split(r"\s*(?:,|;|\||\n)\s*", text)
+        if split_multiple
+        else [text]
+    )
+    return [part.strip() for part in parts if part.strip()]
+
+
+def valid_subzone(value: str) -> bool:
+    """Evita que polígonos, muelles y valores vacíos aparezcan como subzonas."""
+
+    return filter_key(value).startswith("subzona ")
+
+
+def options(
+    data: pd.DataFrame,
+    column: str,
+    *,
+    split_multiple: bool = False,
+    validator=None,
+) -> list[str]:
     if column not in data.columns:
         return []
-    return sorted(data[column].dropna().astype(str).unique())
+
+    unique_labels: dict[str, str] = {}
+    for value in data[column]:
+        for label in split_filter_values(value, split_multiple):
+            key = filter_key(label)
+            if key in INVALID_FILTER_VALUES or key == "ancaldo":
+                continue
+            if validator is not None and not validator(label):
+                continue
+            unique_labels.setdefault(key, label)
+
+    return sorted(unique_labels.values(), key=filter_key)
+
+
+def filter_selected_values(
+    data: pd.DataFrame,
+    column: str,
+    selected: list[str],
+    *,
+    split_multiple: bool = False,
+) -> pd.DataFrame:
+    """Filtra por claves limpias e identifica valores dentro de combinaciones."""
+
+    if not selected or column not in data.columns:
+        return data
+
+    selected_keys = {filter_key(value) for value in selected}
+
+    def contains_selected(value: object) -> bool:
+        value_keys = {
+            filter_key(part)
+            for part in split_filter_values(value, split_multiple)
+        }
+        return bool(value_keys & selected_keys)
+
+    return data.loc[data[column].map(contains_selected)].copy()
 
 
 apply_styles()
@@ -222,34 +322,54 @@ with supervision_tab:
             )
             selected_faults = st.multiselect(
                 "Tipo de falta",
-                options(visible_supervisions, "tipos_falta"),
+                options(
+                    visible_supervisions,
+                    "tipos_falta",
+                    split_multiple=True,
+                ),
                 placeholder="Todos",
                 key="page_supervision_faults",
             )
         with sup_right:
             selected_measures = st.multiselect(
                 "Medida tomada",
-                options(visible_supervisions, "medida_tomada"),
+                options(
+                    visible_supervisions,
+                    "medida_tomada",
+                    split_multiple=True,
+                ),
                 placeholder="Todas",
                 key="page_supervision_measures",
             )
             selected_subzones = st.multiselect(
                 "Subzona de supervisión",
-                options(visible_supervisions, "subzona"),
+                options(
+                    visible_supervisions,
+                    "subzona",
+                    validator=valid_subzone,
+                ),
                 placeholder="Todas",
                 key="page_supervision_subzones",
             )
 
     visible_supervisions = text_search(visible_supervisions, supervision_search)
-    for column, selected in (
-        ("tipos_falta", selected_faults),
-        ("medida_tomada", selected_measures),
-        ("subzona", selected_subzones),
-    ):
-        if selected and column in visible_supervisions.columns:
-            visible_supervisions = visible_supervisions[
-                visible_supervisions[column].astype(str).isin(selected)
-            ]
+    visible_supervisions = filter_selected_values(
+        visible_supervisions,
+        "tipos_falta",
+        selected_faults,
+        split_multiple=True,
+    )
+    visible_supervisions = filter_selected_values(
+        visible_supervisions,
+        "medida_tomada",
+        selected_measures,
+        split_multiple=True,
+    )
+    visible_supervisions = filter_selected_values(
+        visible_supervisions,
+        "subzona",
+        selected_subzones,
+    )
 
     if "fecha" in visible_supervisions.columns:
         visible_supervisions = visible_supervisions.sort_values("fecha", ascending=False)
@@ -301,21 +421,31 @@ with recorrido_tab:
             )
             selected_route_subzones = st.multiselect(
                 "Subzona del recorrido",
-                options(visible_recorridos, "subzona"),
+                options(
+                    visible_recorridos,
+                    "subzona",
+                    validator=valid_subzone,
+                ),
                 placeholder="Todas",
                 key="page_recorrido_subzones",
             )
 
     visible_recorridos = text_search(visible_recorridos, recorrido_search)
-    for column, selected in (
-        ("tipo_actividad", selected_activities),
-        ("vehiculo", selected_vehicles),
-        ("subzona", selected_route_subzones),
-    ):
-        if selected and column in visible_recorridos.columns:
-            visible_recorridos = visible_recorridos[
-                visible_recorridos[column].astype(str).isin(selected)
-            ]
+    visible_recorridos = filter_selected_values(
+        visible_recorridos,
+        "tipo_actividad",
+        selected_activities,
+    )
+    visible_recorridos = filter_selected_values(
+        visible_recorridos,
+        "vehiculo",
+        selected_vehicles,
+    )
+    visible_recorridos = filter_selected_values(
+        visible_recorridos,
+        "subzona",
+        selected_route_subzones,
+    )
 
     if "fecha" in visible_recorridos.columns:
         visible_recorridos = visible_recorridos.sort_values("fecha", ascending=False)
