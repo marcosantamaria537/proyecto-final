@@ -506,7 +506,7 @@ with header_left:
     )
 
 with header_right:
-    logo_path = ROOT / "assets" / "Conanp_Logo_Vector.svg"
+    logo_path = ROOT / "assets" / "Conanp_Logo__Vector.svg"
 
     if logo_path.exists():
         st.image(
