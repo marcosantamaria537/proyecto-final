@@ -353,16 +353,41 @@ with st.sidebar:
     st.divider()
     st.markdown("### Filtros")
 
+        # Obtener las fechas de supervisiones y recorridos.
     all_dates = pd.concat(
         [
-            supervisions["fecha"],
-            recorridos["fecha"],
+            pd.to_datetime(
+                supervisions["fecha"],
+                errors="coerce",
+            ),
+            pd.to_datetime(
+                recorridos["fecha"],
+                errors="coerce",
+            ),
         ],
         ignore_index=True,
     ).dropna()
 
-    min_date = all_dates.min().date()
-    max_date = all_dates.max().date()
+    # Evitar errores cuando no existen fechas válidas.
+    if all_dates.empty:
+        st.warning(
+            "No se encontraron fechas válidas "
+            "en supervisiones ni recorridos."
+        )
+
+        min_date = date.today()
+        max_date = date.today()
+
+    else:
+        min_date = all_dates.min().date()
+        max_date = all_dates.max().date()
+
+    selected_dates = st.date_input(
+        "Periodo",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date,
+    )
 
     selected_dates = st.date_input(
         "Periodo",
